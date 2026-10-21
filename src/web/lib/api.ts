@@ -31,6 +31,7 @@ export interface SystemInfo {
   llm: { providerId: string; model: string } | null;
   providers: { id: string; name: string; type: string; hasKey: boolean }[];
   dataDir: string;
+  appRoot: string;
   node: string;
   platform: string;
 }
@@ -56,6 +57,20 @@ export interface JsonSchemaProp {
   anyOf?: JsonSchemaProp[];
   minimum?: number;
   maximum?: number;
+}
+
+export interface StockResult {
+  id: string;
+  provider: string;
+  type: 'video' | 'image';
+  thumb: string;
+  url: string;
+  width: number;
+  height: number;
+  duration?: number;
+  author?: string;
+  license: string;
+  description?: string;
 }
 
 export interface LibrarySound {
@@ -132,9 +147,15 @@ export const api = {
   deleteRender: (id: string, renderId: string) => send('DELETE', `/api/projects/${id}/render/${renderId}`),
   renderPresets: () => get<{ id: string; label: string }[]>('/api/render-presets'),
   thumbnail: (id: string) => send<{ url: string }>('POST', `/api/projects/${id}/thumbnail`),
+  frames: (id: string, times: number[]) => send<{ frames: { time: number; url: string }[]; errors: string[] }>('POST', `/api/projects/${id}/frames`, { times }),
+  analyze: (id: string, assetId: string) => send('POST', `/api/projects/${id}/assets/${assetId}/analyze`),
+
+  /** Run an agent tool from an editor button (voiceover, stock import, auto-cut, captions…). */
+  runTool: (id: string, name: string, input: Record<string, unknown> = {}) => send<{ text: string; summary?: string; imageUrls: string[] }>('POST', `/api/projects/${id}/tools/${name}`, input),
+  stockSearch: (id: string, query: string, type: 'video' | 'image') => send<{ results: StockResult[]; errors: string[] }>('POST', `/api/projects/${id}/stock/search`, { query, type }),
 
   chat: (id: string) => get<ChatSnapshot>(`/api/projects/${id}/chat`),
-  sendChat: (id: string, text: string, attachments: string[] = []) => send('POST', `/api/projects/${id}/chat`, { text, attachments }),
+  sendChat: (id: string, text: string, attachments: string[] = [], context?: string) => send('POST', `/api/projects/${id}/chat`, { text, attachments, context }),
   answer: (id: string, messageId: string, answers: AnswerItem[]) => send('POST', `/api/projects/${id}/chat/answer`, { messageId, answers }),
   approve: (id: string, messageId: string, approved: boolean) => send('POST', `/api/projects/${id}/chat/approve`, { messageId, approved }),
   stop: (id: string) => send('POST', `/api/projects/${id}/chat/stop`),
@@ -156,3 +177,5 @@ export const api = {
 };
 
 export const mediaUrl = (projectId: string, file: string) => `/media/${projectId}/${encodeURIComponent(file)}`;
+export const librarySoundUrl = (soundId: string) => `/api/library/${encodeURIComponent(soundId)}/audio`;
+export const renderUrl = (projectId: string, file: string, download = false) => `/renders/${projectId}/${encodeURIComponent(file)}${download ? '?download' : ''}`;

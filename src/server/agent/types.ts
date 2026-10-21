@@ -22,9 +22,9 @@ export interface ToolContext {
   projectId: string;
   settings: Settings;
   signal: AbortSignal;
-  /** 'director', a sub-agent id, or 'mcp' */
+  /** 'director', a sub-agent id, 'mcp', or 'user' (editor buttons) */
   agentName: string;
-  source: 'agent' | 'mcp';
+  source: 'agent' | 'mcp' | 'user';
   /** live status line on the running tool card */
   progress: (text: string) => void;
   ask: (payload: Omit<AskPayload, 'id'>) => Promise<AnswerItem[]>;

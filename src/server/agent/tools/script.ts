@@ -128,7 +128,7 @@ export const generateVoiceover = defineTool({
         words: speech.words,
         wait: true,
         description: `Voiceover: "${job.text.slice(0, 120)}"`,
-        updateSource: ctx.source === 'mcp' ? 'mcp' : 'agent',
+        updateSource: ctx.source,
       });
       let clipId: string | undefined;
       let start = cursor;

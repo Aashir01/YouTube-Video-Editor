@@ -6,7 +6,7 @@ import { getServerOrigin } from '../../render/render';
 import type { ToolContext } from '../types';
 
 export const mutate = (ctx: ToolContext, label: string, fn: (draft: Project) => void | Promise<void>): Promise<Project> =>
-  store.update(ctx.projectId, label, fn, { source: ctx.source === 'mcp' ? 'mcp' : 'agent' });
+  store.update(ctx.projectId, label, fn, { source: ctx.source });
 
 export const getProject = (ctx: ToolContext) => store.get(ctx.projectId);
 

@@ -9,7 +9,7 @@ import { lintProject } from '../../shared/timeline';
 import { createDemoProject } from '../../shared/sample';
 import { TEMPLATE_IDS, templateCatalog } from '../../shared/templates';
 import { FONTS } from '../../shared/fonts';
-import { DATA_DIR, getSavedSettings, getSettings, maskedSettings, mergeSettingsUpdate, saveSettings, ProviderSchema, type Settings } from '../config';
+import { APP_ROOT, DATA_DIR, getSavedSettings, getSettings, maskedSettings, mergeSettingsUpdate, saveSettings, ProviderSchema, type Settings } from '../config';
 import { bus } from '../events';
 import { store } from '../storage/projects';
 import { serveFile, receiveUploads } from '../http/files';
@@ -59,6 +59,7 @@ api.get('/system', async (c) => {
     llm: s.llm.main ?? null,
     providers: s.llm.providers.map((p) => ({ id: p.id, name: p.name, type: p.type, hasKey: Boolean(p.apiKey) || (p.baseUrl ?? '').includes('localhost') })),
     dataDir: DATA_DIR,
+    appRoot: APP_ROOT,
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
   });
@@ -109,6 +110,7 @@ api.get('/voices', async (c) => c.json(await listVoices(getSettings())));
 api.get('/templates', (c) => c.json(templateCatalog()));
 api.get('/fonts', (c) => c.json(FONTS));
 api.get('/library', (c) => c.json(listLibrary()));
+api.get('/library/:soundId/audio', async (c) => serveFile(c, libraryFile(c.req.param('soundId'))));
 api.get('/render-presets', (c) => c.json(Object.entries(RENDER_PRESETS).map(([id, p]) => ({ id, label: p.label }))));
 
 // ---------------------------------------------------------------------------

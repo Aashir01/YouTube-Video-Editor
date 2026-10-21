@@ -50,7 +50,7 @@ export class AgentSession {
   private state: AgentState = { status: 'idle' };
   private abort: AbortController | null = null;
   private running: Promise<void> | null = null;
-  private inbox: { text: string; attachments: Attachment[] }[] = [];
+  private inbox: { text: string; attachments: Attachment[]; context?: string }[] = [];
   private pendingAsk = new Map<string, (answers: AnswerItem[]) => void>();
   private pendingApproval = new Map<string, (ok: boolean) => void>();
   private saveTimer: NodeJS.Timeout | null = null;
@@ -129,7 +129,8 @@ export class AgentSession {
   // Public API (used by HTTP routes)
   // -------------------------------------------------------------------------
 
-  async send(text: string, attachmentIds: string[] = []): Promise<void> {
+  /** `context` is editor state the user did not type (playhead, selection); the model sees it, the chat does not. */
+  async send(text: string, attachmentIds: string[] = [], context?: string): Promise<void> {
     const project = await store.get(this.projectId);
     const attachments: Attachment[] = attachmentIds
       .map((id) => project.assets.find((a) => a.id === id))
@@ -144,10 +145,10 @@ export class AgentSession {
       return;
     }
     if (this.running) {
-      this.inbox.push({ text, attachments });
+      this.inbox.push({ text, attachments, context });
       return;
     }
-    this.start(text, attachments);
+    this.start(text, attachments, context);
   }
 
   answer(messageId: string, answers: AnswerItem[]) {
@@ -189,10 +190,10 @@ export class AgentSession {
   // The agent loop
   // -------------------------------------------------------------------------
 
-  private start(text: string, attachments: Attachment[]) {
+  private start(text: string, attachments: Attachment[], context?: string) {
     this.abort = new AbortController();
     const signal = this.abort.signal;
-    this.running = this.run(text, attachments, signal)
+    this.running = this.run(text, attachments, signal, context)
       .catch((err) => console.error('[agent] run crashed', err))
       .finally(() => {
         this.running = null;
@@ -201,13 +202,13 @@ export class AgentSession {
         this.scheduleSave(true);
         const next = this.inbox.shift();
         if (next) {
-          const rest = this.inbox.splice(0);
-          this.start([next, ...rest].map((x) => x.text).join('\n\n'), [next, ...rest].flatMap((x) => x.attachments));
+          const all = [next, ...this.inbox.splice(0)];
+          this.start(all.map((x) => x.text).join('\n\n'), all.flatMap((x) => x.attachments), all.at(-1)?.context);
         }
       });
   }
 
-  private async userContent(text: string, attachments: Attachment[]): Promise<string> {
+  private async userContent(text: string, attachments: Attachment[], context?: string): Promise<string> {
     const p = await store.get(this.projectId);
     const att = attachments.length
       ? `\n\nAttached files (already in the project): ${attachments
@@ -217,10 +218,11 @@ export class AgentSession {
           })
           .join(', ')}`
       : '';
-    return `${await studioStateBlock(p, getSettings())}\n\n${text}${att}`;
+    const editor = context?.trim() ? `\n\n<editor_context>\n${context.trim().slice(0, 2000)}\n</editor_context>` : '';
+    return `${await studioStateBlock(p, getSettings())}${editor}\n\n${text}${att}`;
   }
 
-  private async run(text: string, attachments: Attachment[], signal: AbortSignal) {
+  private async run(text: string, attachments: Attachment[], signal: AbortSignal, context?: string) {
     const settings = getSettings();
     let model: ChatModel;
     try {
@@ -229,7 +231,7 @@ export class AgentSession {
       this.system(err instanceof NoModelConfiguredError ? err.message : `Model error: ${(err as Error).message}`, 'error');
       return;
     }
-    this.data.llm.push({ role: 'user', content: [{ type: 'text', text: await this.userContent(text, attachments) }] });
+    this.data.llm.push({ role: 'user', content: [{ type: 'text', text: await this.userContent(text, attachments, context) }] });
     const tools = allTools();
     const system = buildSystemPrompt();
     const toolSpecs = specs(tools);
@@ -299,7 +301,14 @@ export class AgentSession {
         const msgs = this.inbox.splice(0);
         history.push({
           role: 'user',
-          content: [{ type: 'text', text: `New message from the user while you were working:\n${msgs.map((m) => m.text + (m.attachments.length ? ` [attached: ${m.attachments.map((a) => `${a.assetId} ${a.kind} "${a.name}"`).join(', ')}]` : '')).join('\n')}` }],
+          content: [
+            {
+              type: 'text',
+              text: `New message from the user while you were working:\n${msgs
+                .map((m) => m.text + (m.attachments.length ? ` [attached: ${m.attachments.map((a) => `${a.assetId} ${a.kind} "${a.name}"`).join(', ')}]` : '') + (m.context ? ` [editor: ${m.context.replace(/\s+/g, ' ').slice(0, 600)}]` : ''))
+                .join('\n')}`,
+            },
+          ],
         });
       }
       this.scheduleSave();
@@ -509,4 +518,18 @@ export const mcpToolContext = (projectId: string, signal: AbortSignal): ToolCont
   approve: () => Promise.resolve(true),
   updatePlan: () => undefined,
   runSubagent: () => Promise.reject(new Error('Sub-agents are not available over MCP.')),
+});
+
+/** Tool context for editor buttons: the click is the approval; no chat, so no questions. */
+export const userToolContext = (projectId: string, signal: AbortSignal, progress: (t: string) => void): ToolContext => ({
+  projectId,
+  settings: getSettings(),
+  signal,
+  agentName: 'user',
+  source: 'user',
+  progress,
+  ask: () => Promise.reject(new Error('This action needs more input; ask the Director in the chat instead.')),
+  approve: () => Promise.resolve(true),
+  updatePlan: () => undefined,
+  runSubagent: () => Promise.reject(new Error('Sub-agents are only available in the chat.')),
 });

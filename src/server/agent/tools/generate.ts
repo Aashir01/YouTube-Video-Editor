@@ -13,6 +13,13 @@ import { getProject } from './helpers';
 
 const lastSearch = new Map<string, Map<string, StockResult>>();
 
+/** Remember stock results so import_stock can download them by id (used by the editor's stock browser too). */
+export const rememberStockResults = (projectId: string, results: StockResult[]) => {
+  const map = lastSearch.get(projectId) ?? new Map<string, StockResult>();
+  for (const r of results) map.set(r.id, r);
+  lastSearch.set(projectId, map);
+};
+
 export const searchStockTool = defineTool({
   name: 'search_stock',
   category: 'generate',
@@ -30,9 +37,7 @@ export const searchStockTool = defineTool({
     const orientation = input.orientation ?? (p.canvas.height > p.canvas.width ? 'portrait' : 'landscape');
     const { results, errors } = await searchStock({ query: input.query, type: input.type, orientation, count: input.count }, ctx.settings);
     if (!results.length) return { text: `No results.${errors.length ? ` Errors: ${errors.join('; ')}` : ''}`, isError: errors.length > 0 };
-    const map = lastSearch.get(ctx.projectId) ?? new Map<string, StockResult>();
-    for (const r of results) map.set(r.id, r);
-    lastSearch.set(ctx.projectId, map);
+    rememberStockResults(ctx.projectId, results);
     const images: ToolImage[] = [];
     await Promise.all(
       results.slice(0, 8).map(async (r, i) => {
@@ -79,7 +84,7 @@ export const importStock = defineTool({
           tags: ['stock', r.provider],
           source: { provider: r.provider, url: r.pageUrl, author: r.author, authorUrl: r.authorUrl, license: r.license },
           wait: true,
-          updateSource: ctx.source === 'mcp' ? 'mcp' : 'agent',
+          updateSource: ctx.source,
         });
         out.push({ id, assetId: asset.id, kind: asset.kind, duration: asset.meta.duration, size: `${asset.meta.width}x${asset.meta.height}` });
       } catch (err) {
@@ -111,7 +116,7 @@ export const generateImageTool = defineTool({
       description: `AI image (${img.model}): ${input.prompt}`,
       tags: ['ai-image'],
       wait: true,
-      updateSource: ctx.source === 'mcp' ? 'mcp' : 'agent',
+      updateSource: ctx.source,
     });
     const data = await fsp.readFile(store.mediaPath(ctx.projectId, asset.file));
     return {
@@ -135,7 +140,7 @@ export const addLibrarySound = defineTool({
     if (!item) return { text: `Unknown sound. Available: ${listLibrary().map((s) => s.id).join(', ')}`, isError: true };
     const existing = (await getProject(ctx)).assets.find((a) => a.origin === 'library' && a.tags.includes(item.id));
     if (existing) return { text: `Already in project: ${existing.id} (${existing.meta.duration?.toFixed(2)}s)`, summary: existing.id };
-    const asset = await registerAsset(ctx.projectId, { sourcePath: libraryFile(item.id), originalName: `${item.name}.wav`, copy: true, origin: 'library', tags: [item.id, item.kind, ...item.tags], description: item.description, wait: true, updateSource: ctx.source === 'mcp' ? 'mcp' : 'agent' });
+    const asset = await registerAsset(ctx.projectId, { sourcePath: libraryFile(item.id), originalName: `${item.name}.wav`, copy: true, origin: 'library', tags: [item.id, item.kind, ...item.tags], description: item.description, wait: true, updateSource: ctx.source });
     return { text: `Added ${item.name}: ${asset.id} (${asset.meta.duration?.toFixed(2)}s, ${item.kind}).`, summary: asset.id };
   },
 });
@@ -175,7 +180,7 @@ export const generateAudio = defineTool({
       description: `ElevenLabs ${input.kind}: ${input.prompt}`,
       tags: [input.kind],
       wait: true,
-      updateSource: ctx.source === 'mcp' ? 'mcp' : 'agent',
+      updateSource: ctx.source,
     });
     return { text: `Created ${asset.id} (${asset.meta.duration?.toFixed(2)}s).`, summary: asset.id };
   },
