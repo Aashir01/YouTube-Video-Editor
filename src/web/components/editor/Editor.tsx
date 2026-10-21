@@ -93,8 +93,10 @@ const useShortcuts = () => {
       } else if (e.key === 'Escape') {
         s.select([]);
       } else if (e.key === '=' || e.key === '+') {
+        useStudio.setState({ autoFit: false });
         s.setZoom(clamp((s.zoom || 40) * 1.25, 2, 600));
       } else if (e.key === '-') {
+        useStudio.setState({ autoFit: false });
         s.setZoom(clamp((s.zoom || 40) / 1.25, 2, 600));
       } else if (e.key === '/') {
         e.preventDefault();

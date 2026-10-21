@@ -83,6 +83,7 @@ export interface ClipBlockProps {
   project: Project;
   left: number;
   width: number;
+  height: number;
   selected: boolean;
   dragging: boolean;
   locked: boolean;
@@ -91,13 +92,14 @@ export interface ClipBlockProps {
   onContextMenu: (e: React.MouseEvent, clip: Clip) => void;
 }
 
-export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, left, width, selected, dragging, locked, dimmed, onPointerDown, onContextMenu }) => {
+export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, left, width, height, selected, dragging, locked, dimmed, onPointerDown, onContextMenu }) => {
   const color = clipColor(clip);
   const asset = 'assetId' in clip ? project.assets.find((a) => a.id === clip.assetId) : undefined;
   const thumb = asset?.thumb && (clip.type === 'video' || clip.type === 'image') ? mediaUrl(project.id, asset.thumb) : null;
   const hasAudio = clip.type === 'audio' || (clip.type === 'video' && asset?.meta.hasAudio && !clip.muted);
   const label = clipLabel(clip, project);
   const narrow = width < 46;
+  const short = height < 40;
   const detail =
     clip.type === 'scene'
       ? String((clip.props as Record<string, unknown>).title ?? (clip.props as Record<string, unknown>).heading ?? (clip.props as Record<string, unknown>).text ?? '')
@@ -138,7 +140,7 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
           <span className="truncate drop-shadow">{label}</span>
         </div>
       )}
-      {!narrow && detail && <div className="relative truncate px-1.5 pt-0.5 opacity-70">{detail}</div>}
+      {!narrow && !short && detail && <div className="relative truncate px-1.5 pt-0.5 opacity-70">{detail.replace(/\*/g, '')}</div>}
       {clip.transitionIn && <div className="pointer-events-none absolute left-0 top-0 h-full bg-gradient-to-r from-white/25 to-transparent" style={{ width: Math.min(width / 2, clip.transitionIn.duration * (width / clip.duration)) }} />}
       {clip.transitionOut && <div className="pointer-events-none absolute right-0 top-0 h-full bg-gradient-to-l from-white/25 to-transparent" style={{ width: Math.min(width / 2, clip.transitionOut.duration * (width / clip.duration)) }} />}
       {!locked && (

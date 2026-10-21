@@ -122,7 +122,8 @@ export const QuestionCard: React.FC<{ m: QuestionMsg }> = ({ m }) => {
     return { questionId: q.id, value: q.kind === 'multi' ? values : values[0] ?? '' };
   };
   const complete = m.payload.questions.every((q) => {
-    if (q.required === false) return true;
+    // attachments are optional unless the agent says otherwise: not everyone has footage
+    if (q.required === false || (q.kind === 'files' && q.required !== true)) return true;
     const a = answerFor(q);
     return Array.isArray(a.value) ? a.value.length > 0 : Boolean(a.value) || Boolean(a.assetIds?.length);
   });

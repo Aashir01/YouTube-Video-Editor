@@ -22,12 +22,12 @@ export const LeftPanel: React.FC = () => {
   const assetCount = useStudio((s) => s.project?.assets.length ?? 0);
   return (
     <div className="flex h-full min-h-0">
-      <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line py-2">
+      <nav className="flex w-[62px] shrink-0 flex-col items-center gap-1 border-r border-line py-2">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={cn('relative flex w-12 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-semibold text-dim transition-colors hover:bg-panel-2 hover:text-text', tab === id && 'bg-panel-3 text-text')}
+            className={cn('relative flex w-[54px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-semibold text-dim transition-colors hover:bg-panel-2 hover:text-text', tab === id && 'bg-panel-3 text-text')}
           >
             <Icon className={cn('size-[18px]', tab === id && 'text-accent')} />
             {label}

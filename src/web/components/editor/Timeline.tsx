@@ -65,9 +65,11 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
     g.fillStyle = '#8a92a8';
     g.font = '10px "JetBrains Mono Variable", monospace';
     g.textBaseline = 'top';
-    for (let t = Math.floor(t0 / minor) * minor; t <= t1 + minor; t += minor) {
+    const perMajor = Math.round(major / minor);
+    for (let i = Math.floor(t0 / minor); i * minor <= t1 + minor; i++) {
+      const t = Math.round(i * minor * 1000) / 1000;
       const x = Math.round(t * zoom - scrollLeft) + 0.5;
-      const isMajor = Math.abs(t / major - Math.round(t / major)) < 1e-6;
+      const isMajor = i % perMajor === 0;
       g.beginPath();
       g.moveTo(x, isMajor ? 10 : 18);
       g.lineTo(x, RULER_H);
@@ -239,9 +241,11 @@ export const Timeline: React.FC = () => {
   const zoom = storeZoom > 0 ? storeZoom : 40;
   const contentW = Math.max(viewW, (Math.max(duration, 10) + 30) * zoom);
 
+  const autoFit = useStudio((s) => s.autoFit);
   const fit = useCallback(() => {
     const w = (scroller.current?.clientWidth ?? 800) - HEADER_W - 40;
     setZoom(clamp(w / Math.max(duration, 5), MIN_ZOOM, MAX_ZOOM));
+    useStudio.setState({ autoFit: true });
     if (scroller.current) scroller.current.scrollLeft = 0;
   }, [duration, setZoom]);
 
@@ -253,18 +257,18 @@ export const Timeline: React.FC = () => {
     return () => ro.disconnect();
   }, []);
 
-  // first open: fit the whole video
-  const fitted = useRef(false);
+  // keep the whole video in view while it grows (e.g. the Director adding scenes), until the user zooms by hand
   useEffect(() => {
-    if (fitted.current || viewW <= 0) return;
-    fitted.current = true;
-    if (storeZoom <= 0 || duration * storeZoom < viewW * 0.25 || duration * storeZoom > viewW * 4) fit();
-  }, [viewW, storeZoom, duration, fit]);
+    if (!autoFit || viewW <= 0) return;
+    const t = setTimeout(fit, 150);
+    return () => clearTimeout(t);
+  }, [autoFit, viewW, duration, fit]);
 
   const zoomAround = useCallback(
     (next: number, anchorPx?: number) => {
       const el = scroller.current;
       const z = clamp(next, MIN_ZOOM, MAX_ZOOM);
+      useStudio.setState({ autoFit: false });
       if (!el) return setZoom(z);
       const anchor = anchorPx ?? (useStudio.getState().time * zoom - el.scrollLeft);
       const t = (el.scrollLeft + anchor) / zoom;
@@ -576,6 +580,7 @@ export const Timeline: React.FC = () => {
                     <TrackHeader track={track} height={TRACK_H[track.kind]} />
                   </div>
                   <div
+                    data-track-name={track.name}
                     className={cn('relative border-b border-line/70', i % 2 === 0 ? 'bg-[#0d0f15]' : 'bg-[#0b0d12]', track.locked && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_8px,#ffffff06_8px,#ffffff06_16px)]')}
                     style={{ width: contentW, opacity: track.hidden ? 0.55 : 1 }}
                     onPointerDown={onLanePointerDown}
@@ -605,6 +610,7 @@ export const Timeline: React.FC = () => {
                           project={project}
                           left={start * zoom}
                           width={(end - start) * zoom}
+                          height={TRACK_H[track.kind]}
                           selected={selection.includes(clip.id)}
                           dragging={dragging}
                           locked={track.locked}
@@ -628,6 +634,7 @@ export const Timeline: React.FC = () => {
                             project={project}
                             left={(r.clip.start + drag.delta) * zoom}
                             width={r.clip.duration * zoom}
+                            height={TRACK_H[track.kind]}
                             selected
                             dragging
                             locked={false}

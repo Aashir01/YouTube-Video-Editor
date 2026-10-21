@@ -49,6 +49,8 @@ interface StudioStore {
   playing: boolean;
   selection: string[];
   zoom: number;
+  /** Timeline zoom follows the video length until the user zooms by hand. */
+  autoFit: boolean;
   snapping: boolean;
   leftTab: LeftTab;
   rightTab: RightTab;
@@ -218,6 +220,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     playing: false,
     selection: [],
     zoom: prefs.get('zoom', 0),
+    autoFit: true,
     snapping: prefs.get('snapping', true),
     leftTab: prefs.get<LeftTab>('leftTab', 'media'),
     rightTab: 'director',

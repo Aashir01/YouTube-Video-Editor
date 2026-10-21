@@ -448,7 +448,7 @@ export const Segmented = <T extends string>({
         title={o.title}
         onClick={() => onChange(o.value)}
         className={cn(
-          'flex flex-1 items-center justify-center gap-1.5 rounded-md font-semibold text-muted transition-colors hover:text-text',
+          'flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-semibold text-muted transition-colors hover:text-text',
           size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs',
           value === o.value && 'bg-panel-3 text-text shadow',
         )}

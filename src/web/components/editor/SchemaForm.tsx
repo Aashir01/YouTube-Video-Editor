@@ -11,6 +11,7 @@ const BIG = 1e12;
 
 const humanize = (key: string) =>
   key
+    .replace(/AssetId$/, '')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[-_]/g, ' ')
     .replace(/^./, (c) => c.toUpperCase());

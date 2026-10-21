@@ -97,7 +97,7 @@ const sampleCaption = (preset: string, duration: number): Clip =>
       { text: 'for', start: 1.3, end: 1.5 },
       { text: 'you', start: 1.5, end: 1.9 },
     ],
-    style: { preset, color: '#FFFFFF', position: 'center', offsetY: 0 },
+    style: { preset, color: '#FFFFFF', position: 'center', offsetY: 0, fontSize: 190, maxWordsPerPage: 3 },
   }) as unknown as Clip;
 
 export const GraphicsPanel: React.FC = () => {
@@ -116,9 +116,9 @@ export const GraphicsPanel: React.FC = () => {
   const textClips = useMemo(
     () =>
       ({
-        title: { id: 'txt-title', type: 'text', text: 'Big *bold* title', start: 0, duration: 3, x: 0.5, y: 0.5, style: { font: 'montserrat', size: 120, weight: 800, color: '#FFFFFF', align: 'center', uppercase: true, italic: false, letterSpacing: 0, lineHeight: 1.1, padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
-        lower: { id: 'txt-lower', type: 'text', text: 'Your *name* here', start: 0, duration: 4, x: 0.28, y: 0.82, style: { font: 'inter', size: 54, weight: 700, color: '#FFFFFF', align: 'left', uppercase: false, italic: false, letterSpacing: 0, lineHeight: 1.1, background: 'rgba(0,0,0,0.65)', padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
-        box: { id: 'txt-box', type: 'text', text: 'Key point goes *here*', start: 0, duration: 3, x: 0.5, y: 0.5, style: { font: 'montserrat', size: 60, weight: 800, color: '#FFFFFF', align: 'center', uppercase: false, italic: false, letterSpacing: 0, lineHeight: 1.1, background: 'rgba(0,0,0,0.6)', padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
+        title: { id: 'txt-title', type: 'text', text: 'Big *bold* title', start: 0, duration: 3, x: 0.5, y: 0.5, style: { font: 'montserrat', size: 240, weight: 800, color: '#FFFFFF', align: 'center', uppercase: true, italic: false, letterSpacing: 0, lineHeight: 1.1, padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
+        lower: { id: 'txt-lower', type: 'text', text: 'Your *name* here', start: 0, duration: 4, x: 0.42, y: 0.74, style: { font: 'inter', size: 150, weight: 700, color: '#FFFFFF', align: 'left', uppercase: false, italic: false, letterSpacing: 0, lineHeight: 1.1, background: 'rgba(0,0,0,0.65)', padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
+        box: { id: 'txt-box', type: 'text', text: 'Key point *here*', start: 0, duration: 3, x: 0.5, y: 0.5, style: { font: 'montserrat', size: 170, weight: 800, color: '#FFFFFF', align: 'center', uppercase: false, italic: false, letterSpacing: 0, lineHeight: 1.1, background: 'rgba(0,0,0,0.6)', padding: 24, radius: 16, strokeWidth: 0, shadow: true, maxWidth: 0.85 }, animationIn: 'none', animationOut: 'none', opacity: 1, rotation: 0 },
       }) as unknown as Record<string, Clip>,
     [],
   );
