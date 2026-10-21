@@ -60,7 +60,7 @@ Usage: director <command> [options]
   help             Show this help
 
 MCP (HTTP): while the studio runs, connect any MCP client to http://localhost:3333/mcp
-  claude mcp add --transport http director http://localhost:3333/mcp`);
+  claude mcp add --transport http director-studio http://localhost:3333/mcp`);
 };
 
 switch (cmd) {

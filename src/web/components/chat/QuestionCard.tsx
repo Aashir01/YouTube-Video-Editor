@@ -17,7 +17,7 @@ interface Draft {
   assetIds: string[];
 }
 
-const ACCEPT: Record<string, string> = { video: 'video/*', audio: 'audio/*', image: 'image/*', document: '.pdf,.docx,.txt,.md,.csv,.json,.srt,.vtt' };
+const ACCEPT: Record<string, string> = { video: 'video/*', audio: 'audio/*', image: 'image/*', document: '.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.srt,.vtt,.html,.htm,.xml,.yaml,.yml,.rtf' };
 
 const FilesQuestion: React.FC<{ q: Question; draft: Draft; set: (d: Partial<Draft>) => void }> = ({ q, draft, set }) => {
   const project = useStudio((s) => s.project!);
