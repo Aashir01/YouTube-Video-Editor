@@ -274,7 +274,7 @@ class OpenAICompatChat implements ChatModel {
     const headers: Record<string, string> = { ...(provider.headers ?? {}) };
     if (baseURL.includes('openrouter.ai')) {
       headers['HTTP-Referer'] ??= 'https://github.com/aashir01/youtube-video-editor';
-      headers['X-Title'] ??= 'Director Studio';
+      headers['X-Title'] ??= 'Cutroom';
     }
     this.client = new OpenAI({ apiKey: provider.apiKey || 'not-needed', baseURL, defaultHeaders: headers, maxRetries: 2, timeout: 15 * 60_000 });
     this.vision = VISION_HINT.test(model);

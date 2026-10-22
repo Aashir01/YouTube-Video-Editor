@@ -58,8 +58,8 @@ const FormatMenu: React.FC = () => {
     <Menu
       align="start"
       trigger={
-        <button className="btn btn-ghost btn-sm text-muted" title="Canvas format">
-          {portrait ? <Smartphone className="size-3.5" /> : <Monitor className="size-3.5" />}
+        <button className="btn btn-sm border-line bg-panel-3/60 font-mono text-[11px] text-muted hover:text-text" title="Canvas format">
+          {portrait ? <Smartphone className="size-3.5 text-hue-pink" /> : <Monitor className="size-3.5 text-hue-sky" />}
           {aspect === 'custom' ? `${canvas.width}×${canvas.height}` : aspect} · {canvas.fps}fps
         </button>
       }
@@ -93,7 +93,7 @@ const Activity: React.FC = () => {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content align="end" sideOffset={6} className="z-[90] w-80 rounded-xl border border-line bg-panel-2 p-3 shadow-2xl">
+        <Popover.Content align="end" sideOffset={6} className="glass-pop z-[90] w-80 rounded-xl p-3">
           <div className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Activity</div>
           <div className="flex flex-col gap-2.5">
             {active.map((r) => (
@@ -134,13 +134,14 @@ export const TopBar: React.FC = () => {
   const rendering = renders.find((r) => ['queued', 'bundling', 'rendering', 'finishing'].includes(r.status));
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-panel px-2">
+    <header className="relative z-20 flex h-[52px] shrink-0 items-center gap-1 px-3">
       <Tip label="All projects">
-        <button className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 hover:bg-panel-3" onClick={() => navigate(null)}>
-          <ArrowLeft className="size-4 text-muted" />
-          <Logo className="size-6" />
+        <button className="group flex items-center gap-1.5 rounded-lg px-1.5 py-1 hover:bg-panel-3" onClick={() => navigate(null)}>
+          <ArrowLeft className="size-4 text-muted transition-transform group-hover:-translate-x-0.5" />
+          <Logo className="size-6 drop-shadow-[0_2px_8px_rgb(255_90_31/0.35)]" />
         </button>
       </Tip>
+      <div className="mx-0.5 h-5 w-px bg-line" />
       <ProjectName />
       <FormatMenu />
       <div className="mx-1 h-5 w-px bg-line" />
@@ -160,7 +161,7 @@ export const TopBar: React.FC = () => {
       <IconBtn label="Settings" onClick={() => openSettings()}>
         <Settings className="size-4" />
       </IconBtn>
-      <button className={cn('btn btn-primary ml-1', rendering && 'bg-accent/80')} onClick={() => setExportOpen(true)}>
+      <button className={cn('btn btn-primary ml-1 px-3.5', rendering && 'opacity-90')} onClick={() => setExportOpen(true)}>
         {rendering ? <Spinner className="size-4" /> : <Download className="size-4" />}
         {rendering ? `Rendering ${Math.round(rendering.progress * 100)}%` : 'Export'}
       </button>

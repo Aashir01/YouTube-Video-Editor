@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { toast } from 'sonner';
-import { Bot, Brain, Check, CircleCheck, CircleX, Clapperboard, Copy, ExternalLink, KeyRound, Mic, Plug, Plus, RefreshCw, Trash2, X, Zap } from 'lucide-react';
+import { Bot, Brain, Check, CircleCheck, CircleX, Clapperboard, Copy, ExternalLink, KeyRound, Mic, Plug, Plus, RefreshCw, Settings2, Trash2, X, Zap } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStudio, type SettingsSection } from '../../lib/store';
 import { cn, copyText, errorText } from '../../lib/utils';
@@ -37,14 +37,14 @@ const PRESETS: { key: string; label: string; hint: string; provider: Omit<Provid
   { key: 'custom', label: 'Custom endpoint', hint: 'Any OpenAI-compatible API', provider: { type: 'openai-compatible', name: 'Custom', baseUrl: '', models: [] } },
 ];
 
-const NAV: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
-  { id: 'models', label: 'AI models', icon: Brain },
-  { id: 'speech', label: 'Voice & speech', icon: Mic },
-  { id: 'media', label: 'Media & search keys', icon: KeyRound },
-  { id: 'agent', label: 'Director agent', icon: Bot },
-  { id: 'render', label: 'Rendering', icon: Clapperboard },
-  { id: 'mcp', label: 'MCP & integrations', icon: Plug },
-  { id: 'youtube', label: 'YouTube', icon: YouTubeIcon },
+const NAV: { id: SettingsSection; label: string; icon: React.ElementType; hue: string }[] = [
+  { id: 'models', label: 'AI models', icon: Brain, hue: 'text-hue-violet' },
+  { id: 'speech', label: 'Voice & speech', icon: Mic, hue: 'text-hue-green' },
+  { id: 'media', label: 'Media & search keys', icon: KeyRound, hue: 'text-hue-amber' },
+  { id: 'agent', label: 'Director agent', icon: Bot, hue: 'text-hue-pink' },
+  { id: 'render', label: 'Rendering', icon: Clapperboard, hue: 'text-hue-sky' },
+  { id: 'mcp', label: 'MCP & integrations', icon: Plug, hue: 'text-hue-mint' },
+  { id: 'youtube', label: 'YouTube', icon: YouTubeIcon, hue: 'text-[#ff3b5c]' },
 ];
 
 const isMasked = (v: string | undefined) => Boolean(v?.startsWith('••••'));
@@ -521,10 +521,10 @@ const McpSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ s, 
   return (
     <div className="flex flex-col gap-5">
       <H title="MCP & integrations">
-        Director Studio is an MCP server: Claude Code, Claude Desktop, Cursor and other MCP clients can edit your projects with the same 40 tools the Director uses. It is also an MCP client: connect external servers and the Director gains their tools.
+        Cutroom is an MCP server: Claude Code, Claude Desktop, Cursor and other MCP clients can edit your projects with the same 40 tools the Director uses. It is also an MCP client: connect external servers and the Director gains their tools.
       </H>
       <Card className="grid gap-3">
-        <div className="text-sm font-semibold">Use Director Studio from Claude Code</div>
+        <div className="text-sm font-semibold">Use Cutroom from Claude Code</div>
         <CopyLine text={`claude mcp add --transport http director-studio ${origin}/mcp`} />
         <div className="text-sm font-semibold">Claude Desktop / Cursor (stdio)</div>
         <p className="-mt-2 text-[11px] text-dim">Add to the client’s MCP config. It connects to this running studio, or starts one if needed.</p>
@@ -682,19 +682,25 @@ export const SettingsDialog: React.FC = () => {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(780px,92vh)] w-[min(1040px,96vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl outline-none" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[#03040a]/55 backdrop-blur-md" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(780px,92vh)] w-[min(1040px,96vw)] -translate-x-1/2 -translate-y-1/2 glass-pop overflow-hidden rounded-2xl outline-none" onOpenAutoFocus={(e) => e.preventDefault()}>
           <Dialog.Title className="sr-only">Settings</Dialog.Title>
           <Dialog.Description className="sr-only">Configure AI models, voices, keys and integrations</Dialog.Description>
-          <nav className="flex w-56 shrink-0 flex-col gap-0.5 border-r border-line bg-bg/40 p-3">
-            <div className="mb-2 px-2 text-sm font-bold">Settings</div>
-            {NAV.map(({ id, label, icon: Icon }) => (
+          <nav className="flex w-60 shrink-0 flex-col gap-1 border-r border-line bg-black/25 p-3">
+            <div className="mb-3 flex items-center gap-2 px-2 pt-1">
+              <Settings2 className="size-4 text-accent" />
+              <span className="text-sm font-bold tracking-tight">Settings</span>
+            </div>
+            {NAV.map(({ id, label, icon: Icon, hue }) => (
               <button
                 key={id}
                 onClick={() => useStudio.setState({ settingsSection: id })}
-                className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted hover:bg-panel-2 hover:text-text', section === id && 'bg-panel-3 font-semibold text-text')}
+                className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-[13px] text-muted transition-colors hover:bg-panel-2 hover:text-text', section === id && 'bg-white/[0.09] font-semibold text-text ring-1 ring-white/[0.1]')}
               >
-                <Icon className="size-4" /> {label}
+                <span className={cn('tile size-7', hue)}>
+                  <Icon className="size-3.5" />
+                </span>
+                {label}
               </button>
             ))}
           </nav>

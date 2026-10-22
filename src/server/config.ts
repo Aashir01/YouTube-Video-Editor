@@ -163,6 +163,7 @@ const ENV_PROVIDERS: { id: string; type: ProviderConfig['type']; name: string; b
   { id: 'env-openai', type: 'openai-compatible', name: 'OpenAI (env)', baseUrl: 'https://api.openai.com/v1', keyEnv: ['OPENAI_API_KEY'], model: 'gpt-5', fast: 'gpt-5-mini' },
   { id: 'env-gemini', type: 'gemini', name: 'Google Gemini (env)', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], model: 'gemini-2.5-pro', fast: 'gemini-2.5-flash' },
   { id: 'env-openrouter', type: 'openai-compatible', name: 'OpenRouter (env)', baseUrl: 'https://openrouter.ai/api/v1', keyEnv: ['OPENROUTER_API_KEY'], model: 'anthropic/claude-sonnet-4.5', fast: 'google/gemini-2.5-flash' },
+  { id: 'env-nebius', type: 'openai-compatible', name: 'Nebius (env)', baseUrl: 'https://api.studio.nebius.com/v1', keyEnv: ['NEBIUS_API_KEY'], model: 'moonshotai/Kimi-K3', fast: 'zai-org/GLM-5.3-Flash' },
 ];
 
 /** Settings plus anything configured through environment variables. */

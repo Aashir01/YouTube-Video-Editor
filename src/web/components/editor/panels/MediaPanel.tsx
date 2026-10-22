@@ -53,6 +53,15 @@ export const useUpload = () => {
 const kindIcon = (a: Asset, cls = 'size-6') =>
   a.kind === 'video' ? <Film className={cls} /> : a.kind === 'image' ? <ImageIcon className={cls} /> : a.kind === 'audio' ? <AudioLines className={cls} /> : <FileText className={cls} />;
 
+/** Placeholder tint per asset kind, matching the timeline clip colors. */
+const KIND_STYLE: Record<Asset['kind'], string> = {
+  video: 'text-hue-sky bg-[radial-gradient(circle_at_50%_120%,rgb(56_189_248/0.22),transparent_70%)]',
+  image: 'text-hue-mint bg-[radial-gradient(circle_at_50%_120%,rgb(45_212_191/0.22),transparent_70%)]',
+  audio: 'text-hue-green bg-[radial-gradient(circle_at_50%_120%,rgb(52_211_153/0.2),transparent_70%)]',
+  document: 'text-hue-amber bg-[radial-gradient(circle_at_50%_120%,rgb(251_191_36/0.2),transparent_70%)]',
+  other: 'text-dim',
+};
+
 const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => void }> = ({ asset, selected, onSelect }) => {
   const projectId = useStudio((s) => s.projectId)!;
   const attachToChat = useStudio((s) => s.attachToChat);
@@ -66,9 +75,9 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
       onDragEnd={clearDragPayload}
       onClick={onSelect}
       onDoubleClick={() => placeable && void addAtPlayhead({ kind: 'asset', assetId: asset.id })}
-      className={cn('group relative cursor-pointer overflow-hidden rounded-lg border bg-panel-2 transition-colors', selected ? 'border-accent' : 'border-line hover:border-line-2')}
+      className={cn('group relative cursor-pointer overflow-hidden rounded-xl border bg-panel-2 transition-all', selected ? 'border-accent shadow-[0_0_0_3px_rgb(255_90_31/0.18)]' : 'border-line hover:-translate-y-px hover:border-line-2')}
     >
-      <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-[#0b0d12] text-dim">
+      <div className={cn('relative flex aspect-video items-center justify-center overflow-hidden bg-[#0a0c12]', !asset.thumb && KIND_STYLE[asset.kind])}>
         {asset.thumb ? <img src={mediaUrl(projectId, asset.thumb)} alt="" className="size-full object-cover" loading="lazy" draggable={false} /> : kindIcon(asset)}
         {asset.status === 'processing' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -95,7 +104,7 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
       </div>
       <div className="absolute right-1 top-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 has-[[data-state=open]]:opacity-100">
         {placeable && (
-          <button className="rounded bg-black/70 p-1 text-white hover:bg-accent" title="Add at playhead" onClick={(e) => (e.stopPropagation(), void addAtPlayhead({ kind: 'asset', assetId: asset.id }))}>
+          <button className="rounded-md bg-black/70 p-1 text-white backdrop-blur hover:bg-accent" title="Add at playhead" onClick={(e) => (e.stopPropagation(), void addAtPlayhead({ kind: 'asset', assetId: asset.id }))}>
             <CirclePlus className="size-3.5" />
           </button>
         )}
@@ -143,7 +152,7 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
 const AssetDetails: React.FC<{ asset: Asset }> = ({ asset }) => {
   const edit = useStudio((s) => s.editSoon);
   return (
-    <div className="flex flex-col gap-2 border-t border-line bg-panel px-3 py-2.5 text-xs">
+    <div className="flex flex-col gap-2 border-t border-line bg-black/20 px-3 py-2.5 text-xs">
       <div className="flex items-center gap-2">
         <span className="text-muted">{kindIcon(asset, 'size-4')}</span>
         <span className="min-w-0 flex-1 truncate font-semibold">{asset.name}</span>
@@ -226,7 +235,7 @@ const ProjectMedia: React.FC = () => {
       </div>
       <div className="flex flex-wrap gap-1 px-3 py-2">
         {(['all', 'video', 'image', 'audio', 'document'] as Filter[]).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={cn('chip capitalize', filter === f && 'bg-accent/20 text-[#c9bcff]')}>
+          <button key={f} onClick={() => setFilter(f)} className={cn('chip capitalize transition-colors hover:text-text', filter === f && 'bg-accent/20 text-accent-ink ring-1 ring-accent/30')}>
             {f === 'document' ? 'docs' : f}
           </button>
         ))}

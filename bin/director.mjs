@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Director Studio CLI: start | dev | mcp | build | doctor | help
+// Cutroom CLI: start | dev | mcp | build | doctor | help
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ const opt = (name) => {
 
 const [major, minor] = process.versions.node.split('.').map(Number);
 if (major < 20 || (major === 20 && minor < 19)) {
-  console.error(`Director Studio needs Node.js 20.19+ (you have ${process.versions.node}). Install the LTS from https://nodejs.org`);
+  console.error(`Cutroom needs Node.js 20.19+ (you have ${process.versions.node}). Install the LTS from https://nodejs.org`);
   process.exit(1);
 }
 
@@ -47,7 +47,7 @@ const ensureWebBuild = () => {
 };
 
 const help = () => {
-  console.log(`Director Studio — agentic YouTube video editor
+  console.log(`Cutroom — agentic YouTube video editor
 
 Usage: director <command> [options]
 

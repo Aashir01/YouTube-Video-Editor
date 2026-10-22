@@ -109,10 +109,10 @@ export const Preview: React.FC = () => {
   const empty = duration === 0;
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="stage-grid flex h-full flex-col">
       <div ref={box} className="relative min-h-0 flex-1 m-3 flex items-center justify-center">
         {size.w > 0 && (
-          <div className="relative overflow-hidden rounded-md shadow-2xl ring-1 ring-line" style={{ width: size.w, height: size.h }}>
+          <div className="relative overflow-hidden rounded-lg shadow-[0_30px_80px_-20px_rgb(0_0_0/0.9),0_0_0_1px_rgb(255_255_255/0.08)]" style={{ width: size.w, height: size.h }}>
             <Player
               ref={ref}
               component={Main}
@@ -135,8 +135,10 @@ export const Preview: React.FC = () => {
             />
             {guides && <SafeZones portrait={portrait} />}
             {empty && (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_40%,#1b1640,#08090d_70%)] p-6 text-center">
-                <Clapperboard className="size-9 text-accent" />
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_30%_20%,rgb(255_90_31/0.18),transparent_55%),radial-gradient(circle_at_75%_80%,rgb(139_123_255/0.2),transparent_55%),#07080c] p-6 text-center">
+                <span className="tile mb-1 size-14 rounded-2xl text-accent">
+                  <Clapperboard className="size-7" />
+                </span>
                 <div className="text-base font-bold">Your video will appear here</div>
                 <div className="max-w-sm text-xs text-muted">Tell the Director what to make, or drag media, graphics and sounds from the left panel onto the timeline.</div>
               </div>
@@ -149,7 +151,7 @@ export const Preview: React.FC = () => {
           </div>
         )}
       </div>
-      <div className="flex h-10 shrink-0 items-center gap-1 border-t border-line bg-panel px-3">
+      <div className="flex h-11 shrink-0 items-center gap-1 border-t border-line bg-white/[0.025] px-3">
         <TimeDisplay fps={fps} duration={duration} />
         <div className="flex flex-1 items-center justify-center gap-0.5">
           <IconBtn label="Go to start" shortcut="Home" onClick={() => player.seek(0)}>
@@ -159,7 +161,7 @@ export const Preview: React.FC = () => {
             <StepBack className="size-4" />
           </IconBtn>
           <button
-            className="mx-1 flex size-8 items-center justify-center rounded-full bg-text text-bg transition-transform hover:scale-105 disabled:opacity-40"
+            className="mx-1.5 flex size-9 items-center justify-center rounded-full bg-gradient-to-b from-[#ff7440] to-[#f04a10] text-white shadow-[0_6px_20px_-6px_rgb(255_90_31/0.9)] ring-1 ring-white/20 transition-transform hover:scale-105 disabled:opacity-40 disabled:shadow-none"
             onClick={() => player.toggle()}
             disabled={empty}
             aria-label={playing ? 'Pause' : 'Play'}

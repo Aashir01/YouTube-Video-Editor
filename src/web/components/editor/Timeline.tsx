@@ -18,6 +18,11 @@ import { ClipBlock, type DragMode } from './TimelineClip';
 const HEADER_W = 172;
 const RULER_H = 26;
 const TRACK_H: Record<Track['kind'], number> = { video: 58, overlay: 46, captions: 34, audio: 46 };
+/** Header icon color, matching the clips on the track. */
+const trackHue = (track: Track) => {
+  if (track.kind === 'audio') return track.name.toLowerCase().includes('music') ? 'text-hue-violet' : track.name.toLowerCase().includes('voice') ? 'text-hue-green' : 'text-hue-amber';
+  return track.kind === 'captions' ? 'text-hue-yellow' : track.kind === 'overlay' ? 'text-hue-violet' : 'text-hue-sky';
+};
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 600;
 
@@ -61,8 +66,8 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
     const { major, minor } = niceStep(zoom);
     const t0 = scrollLeft / zoom;
     const t1 = (scrollLeft + width) / zoom;
-    g.strokeStyle = '#3a4156';
-    g.fillStyle = '#8a92a8';
+    g.strokeStyle = '#353c55';
+    g.fillStyle = '#a3abc1';
     g.font = '10px "JetBrains Mono Variable", monospace';
     g.textBaseline = 'top';
     const perMajor = Math.round(major / minor);
@@ -133,8 +138,7 @@ const Playhead: React.FC<{ zoom: number; scroller: React.RefObject<HTMLDivElemen
     if (x < el.scrollLeft || x > el.scrollLeft + view - 30) el.scrollLeft = Math.max(0, x - 60);
   }, [x, playing, scroller]);
   return (
-    <div className="pointer-events-none absolute bottom-0 top-0 z-[5] w-px bg-[#ff4d6d]" style={{ left: HEADER_W + x }}>
-      <div className="absolute -left-[5px] -top-px size-[11px] rotate-45 rounded-[2px] bg-[#ff4d6d]" />
+    <div className="pointer-events-none absolute bottom-0 top-0 z-[5] w-0.5 -translate-x-1/2 bg-accent shadow-[0_0_10px_rgb(255_90_31/0.7)]" style={{ left: HEADER_W + x }}>
     </div>
   );
 };
@@ -146,7 +150,7 @@ const RulerHead: React.FC<{ zoom: number; scrollLeft: number }> = ({ zoom, scrol
   return (
     <div className="pointer-events-none absolute top-0 z-10" style={{ left: HEADER_W + x - 6 }}>
       <svg width="12" height="14" viewBox="0 0 12 14">
-        <path d="M0 0h12v8l-6 6-6-6z" fill="#ff4d6d" />
+        <path d="M0 0h12v8l-6 6-6-6z" fill="#ff5a1f" />
       </svg>
     </div>
   );
@@ -157,7 +161,8 @@ const TimecodeCorner: React.FC = () => {
   const fps = useStudio((s) => s.project?.canvas.fps ?? 30);
   const f = Math.round(time * fps) % fps;
   return (
-    <div className="flex h-full items-center px-3 font-mono text-[11px] tabular-nums text-accent-2">
+    <div className="flex h-full items-center gap-1.5 px-3 font-mono text-[11px] font-semibold tabular-nums text-accent-ink">
+      <span className="size-1.5 rounded-full bg-accent shadow-[0_0_6px_rgb(255_90_31/0.9)]" />
       {formatClock(time)}:{String(f).padStart(2, '0')}
     </div>
   );
@@ -174,9 +179,9 @@ const TrackHeader: React.FC<{ track: Track; height: number }> = ({ track, height
   const visual = track.kind === 'video' || track.kind === 'overlay' || track.kind === 'captions';
   const audible = track.kind === 'audio' || track.kind === 'video' || track.kind === 'overlay';
   return (
-    <div className="group flex items-center gap-1.5 border-b border-r border-line bg-panel px-2" style={{ height, width: HEADER_W }}>
-      <span className="text-dim">
-        <TrackIcon track={track} />
+    <div className="group flex items-center gap-2 border-b border-r border-line bg-solid/80 px-2 backdrop-blur-xl" style={{ height, width: HEADER_W }}>
+      <span className={cn('tile size-6 rounded-md', trackHue(track))}>
+        <TrackIcon track={track} className="size-3.5" />
       </span>
       {renaming ? (
         <input
@@ -501,7 +506,7 @@ export const Timeline: React.FC = () => {
   return (
     <div className="flex h-full flex-col">
       {/* toolbar */}
-      <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2">
+      <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line bg-white/[0.02] px-2">
         <IconBtn label="Split at playhead" shortcut="S" onClick={splitAtPlayhead}>
           <Scissors className="size-4" />
         </IconBtn>
@@ -538,7 +543,7 @@ export const Timeline: React.FC = () => {
           step={0.001}
           value={sliderVal}
           onChange={(e) => zoomAround(MIN_ZOOM * (MAX_ZOOM / MIN_ZOOM) ** Number(e.target.value))}
-          className="w-28 accent-[#7c5cff]"
+          className="w-28 accent-[#ff5a1f]"
           aria-label="Timeline zoom"
         />
         <IconBtn label="Zoom in" shortcut="+" onClick={() => zoomAround(zoom * 1.4)}>
@@ -550,7 +555,7 @@ export const Timeline: React.FC = () => {
       </div>
 
       {/* ruler */}
-      <div className="relative flex shrink-0 border-b border-line bg-panel" style={{ height: RULER_H }}>
+      <div className="relative flex shrink-0 border-b border-line bg-black/20" style={{ height: RULER_H }}>
         <div className="shrink-0 border-r border-line" style={{ width: HEADER_W }}>
           <TimecodeCorner />
         </div>
@@ -581,7 +586,7 @@ export const Timeline: React.FC = () => {
                   </div>
                   <div
                     data-track-name={track.name}
-                    className={cn('relative border-b border-line/70', i % 2 === 0 ? 'bg-[#0d0f15]' : 'bg-[#0b0d12]', track.locked && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_8px,#ffffff06_8px,#ffffff06_16px)]')}
+                    className={cn('relative border-b border-line/70', i % 2 === 0 ? 'bg-white/[0.018]' : 'bg-black/[0.14]', track.locked && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_8px,#ffffff06_8px,#ffffff06_16px)]')}
                     style={{ width: contentW, opacity: track.hidden ? 0.55 : 1 }}
                     onPointerDown={onLanePointerDown}
                     onDragOver={(e) => onDragOver(e, track)}
@@ -644,7 +649,7 @@ export const Timeline: React.FC = () => {
                           />
                         );
                       })()}
-                    {dropHint?.trackId === track.id && <div className="pointer-events-none absolute inset-y-0 z-[4] w-0.5 bg-accent-2 shadow-[0_0_8px_#22d3ee]" style={{ left: dropHint.time * zoom }} />}
+                    {dropHint?.trackId === track.id && <div className="pointer-events-none absolute inset-y-0 z-[4] w-0.5 bg-accent-2 shadow-[0_0_10px_#8b7bff]" style={{ left: dropHint.time * zoom }} />}
                   </div>
                 </div>
               ))}
@@ -655,7 +660,7 @@ export const Timeline: React.FC = () => {
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           {clipMenuItems.length > 0 && (
-            <ContextMenu.Content className="z-[90] min-w-52 rounded-lg border border-line bg-panel-2 p-1 shadow-2xl">
+            <ContextMenu.Content className="glass-pop z-[90] min-w-52 rounded-xl p-1">
               {clipMenuItems.map((it, i) =>
                 it === 'separator' ? (
                   <ContextMenu.Separator key={i} className="my-1 h-px bg-line" />
@@ -665,7 +670,7 @@ export const Timeline: React.FC = () => {
                     disabled={'disabled' in it ? it.disabled : false}
                     onSelect={it.onSelect}
                     className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[highlighted]:bg-panel-3 [&_svg]:size-4 [&_svg]:text-muted',
+                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[highlighted]:bg-panel-3 [&_svg]:size-4 [&_svg]:text-accent-2-ink',
                       'danger' in it && it.danger && 'text-danger',
                     )}
                   >

@@ -6,7 +6,7 @@ import { CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema
 
 /**
  * `director mcp` — MCP over stdio for Claude Desktop / Claude Code / Cursor.
- * If Director Studio is already running, requests are bridged to it (so the
+ * If Cutroom is already running, requests are bridged to it (so the
  * open editor updates live). Otherwise the studio starts in-process.
  */
 export const runStdio = async (port = Number(process.env.PORT ?? 3333)) => {
@@ -17,7 +17,7 @@ export const runStdio = async (port = Number(process.env.PORT ?? 3333)) => {
   let running = false;
   try {
     const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1500) });
-    running = r.ok && ((await r.json()) as { name?: string }).name === 'Director Studio';
+    running = r.ok && ((await r.json()) as { name?: string }).name === 'Cutroom';
   } catch {
     running = false;
   }
@@ -35,7 +35,7 @@ export const runStdio = async (port = Number(process.env.PORT ?? 3333)) => {
     return;
   }
 
-  console.error('[director-mcp] starting Director Studio in-process');
+  console.error('[director-mcp] starting Cutroom in-process');
   const { startServer } = await import('../main');
   const started = await startServer({ quiet: true, port });
   console.error(`[director-mcp] editor UI: ${started.url}`);

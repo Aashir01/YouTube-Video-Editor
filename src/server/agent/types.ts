@@ -54,10 +54,27 @@ export interface AgentTool {
 
 export const defineTool = <S extends z.ZodTypeAny>(t: Omit<AgentTool, 'schema' | 'execute'> & { schema: S; execute: (input: z.infer<S>, ctx: ToolContext) => Promise<ToolOutput | string> }): AgentTool => t as AgentTool;
 
+/** Draft-7 tuples (`items: [...]`) are rejected by strict 2020-12 validators (e.g. Nebius), so turn them into a fixed-length array. */
+const flattenTuples = (v: unknown): unknown => {
+  if (Array.isArray(v)) return v.map(flattenTuples);
+  if (!v || typeof v !== 'object') return v;
+  const o: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(v)) o[k] = flattenTuples(val);
+  if (Array.isArray(o.items)) {
+    const items = o.items as Record<string, unknown>[];
+    const types = [...new Set(items.map((i) => JSON.stringify(i)))];
+    o.items = types.length === 1 ? items[0] : { anyOf: types.map((t) => JSON.parse(t)) };
+    o.minItems ??= items.length;
+    o.maxItems ??= items.length;
+    delete o.additionalItems;
+  }
+  return o;
+};
+
 const cleanSchema = (s: Record<string, unknown>): Record<string, unknown> => {
   const { $schema: _x, ...rest } = s;
   void _x;
-  return rest;
+  return flattenTuples(rest) as Record<string, unknown>;
 };
 
 export const toolJsonSchema = (t: AgentTool): Record<string, unknown> => {
