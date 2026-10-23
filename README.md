@@ -1,4 +1,4 @@
-# Director Studio
+# Cutroom
 
 **An agentic, AI-powered video editor for YouTube.** Tell the Director what you want to make. It asks for what it needs (topic, audience, footage, logo, notes), then scripts, edits, animates, captions, mixes, designs the thumbnail and packages the video for YouTube, live on a real timeline you can edit by hand at any moment.
 
@@ -156,7 +156,7 @@ You can drag media, templates and sounds from the left panel (or files from your
 
 ## Use it from Claude Code, Claude Desktop or Cursor (MCP)
 
-Director Studio is an MCP server with **41 tools**: the Director's 37 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
+Cutroom is an MCP server with **41 tools**: the Director's 37 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
 
 **Claude Code** (while the studio is running):
 
@@ -203,7 +203,7 @@ Uploads use your own free Google Cloud project, so videos never pass through any
 1. In [Google Cloud Console](https://console.cloud.google.com/apis/library/youtube.googleapis.com), create a project and enable **YouTube Data API v3**.
 2. On the OAuth consent screen, choose **External** and add your Google account as a test user.
 3. Under Credentials, create an **OAuth client ID** of type **Desktop app**.
-4. In Director Studio → Settings → **YouTube**, paste the client ID and secret, then click **Save & connect channel**.
+4. In Cutroom → Settings → **YouTube**, paste the client ID and secret, then click **Save & connect channel**.
 
 **Export → YouTube** uploads the render with the title, description and chapters, plus the tags, category, privacy, thumbnail and SRT captions. You can schedule a publish time. The Director can upload too, but always asks for your approval first.
 
@@ -267,5 +267,5 @@ docs/ARCHITECTURE.md    how it all fits together
 ## Licensing notes
 
 - **Remotion** has its own license: it's free for individuals and small companies, while larger for-profit organizations need a company license. See <https://www.remotion.dev/license>.
-- Stock media keeps its provider license (Pexels, Pixabay, Openverse/CC). Director Studio stores attribution with each asset and the Director credits sources in the description.
+- Stock media keeps its provider license (Pexels, Pixabay, Openverse/CC). Cutroom stores attribution with each asset and the Director credits sources in the description.
 - AI-generated voice and images are subject to your providers' terms.

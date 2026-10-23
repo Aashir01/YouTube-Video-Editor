@@ -120,7 +120,7 @@ export const PropField: React.FC<{ name: string; prop: JsonSchemaProp; value: un
         <Field label={label} hint={hint}>
           <div className="flex flex-col gap-2">
             {items.map((item, i) => (
-              <div key={i} className="relative rounded-lg border border-line bg-panel p-2 pr-7">
+              <div key={i} className="relative rounded-lg border border-line bg-black/20 p-2 pr-7">
                 <button className="absolute right-1 top-1 rounded p-0.5 text-dim hover:text-danger" title="Remove" onClick={() => onChange(items.filter((_, j) => j !== i))}>
                   <X className="size-3.5" />
                 </button>
@@ -148,7 +148,7 @@ export const PropField: React.FC<{ name: string; prop: JsonSchemaProp; value: un
     case 'object':
       return (
         <Field label={label} hint={hint}>
-          <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel p-2">
+          <div className="flex flex-col gap-2 rounded-lg border border-line bg-black/20 p-2">
             {Object.entries(prop.properties ?? {}).map(([k, sub]) => (
               <PropField key={k} compact name={k} prop={sub} value={(value as Record<string, unknown> | undefined)?.[k]} onChange={(v) => onChange({ ...((value as object) ?? {}), [k]: v })} />
             ))}

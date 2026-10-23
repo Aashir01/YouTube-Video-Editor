@@ -14,7 +14,7 @@ const bad = (s: string) => console.log(`  ❌ ${s}`);
 export const runDoctor = async (): Promise<number> => {
   let failures = 0;
   const s = getSettings();
-  console.log('\nDirector Studio doctor\n');
+  console.log('\nCutroom doctor\n');
   console.log(`Node ${process.version} on ${process.platform}-${process.arch}; data in ${DATA_DIR}\n`);
 
   console.log('Media');

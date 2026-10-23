@@ -18,7 +18,7 @@ export const installYouTubeRoutes = (app: Hono): void => {
     if (error) return c.html(`<h2>YouTube connection cancelled</h2><p>${error}</p><p>You can close this tab.</p>`);
     try {
       const channel = await handleCallback(c.req.query('code') ?? '', c.req.query('state') ?? '');
-      return c.html(`<!doctype html><meta charset="utf-8"><title>Connected</title><body style="font-family:system-ui;background:#0b0d17;color:#fff;display:grid;place-items:center;height:100vh"><div style="text-align:center"><h2>✅ YouTube connected${channel ? `: ${channel}` : ''}</h2><p>You can close this tab and return to Director Studio.</p><script>setTimeout(()=>window.close(),1500)</script></div></body>`);
+      return c.html(`<!doctype html><meta charset="utf-8"><title>Connected</title><body style="font-family:system-ui;background:#0b0d17;color:#fff;display:grid;place-items:center;height:100vh"><div style="text-align:center"><h2>✅ YouTube connected${channel ? `: ${channel}` : ''}</h2><p>You can close this tab and return to Cutroom.</p><script>setTimeout(()=>window.close(),1500)</script></div></body>`);
     } catch (err) {
       return c.html(`<h2>YouTube connection failed</h2><pre>${(err as Error).message}</pre>`, 400);
     }

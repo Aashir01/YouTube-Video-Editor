@@ -19,7 +19,7 @@ export const Tip: React.FC<{ label: React.ReactNode; shortcut?: string; side?: '
       <Tooltip.Content
         side={side}
         sideOffset={6}
-        className="z-[100] flex items-center gap-2 rounded-md border border-line bg-panel-3 px-2 py-1 text-xs text-text shadow-xl"
+        className="glass-pop z-[100] flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium text-text"
       >
         {label}
         {shortcut && <Kbd>{shortcut}</Kbd>}
@@ -36,7 +36,7 @@ export const IconBtn = React.forwardRef<
     <button
       ref={ref}
       aria-label={label}
-      className={cn('btn btn-ghost btn-icon text-muted hover:text-text', active && 'bg-panel-3 text-text', className)}
+      className={cn('btn btn-ghost btn-icon text-muted hover:text-text', active && 'bg-accent/15 text-accent-ink hover:text-accent-ink', className)}
       {...rest}
     >
       {children}
@@ -54,7 +54,7 @@ export const Spinner: React.FC<{ className?: string }> = ({ className }) => <Loa
 export const ProgressBar: React.FC<{ value: number; className?: string; tone?: 'accent' | 'ok' | 'danger' }> = ({ value, className, tone = 'accent' }) => (
   <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-panel-3', className)}>
     <div
-      className={cn('h-full rounded-full transition-[width] duration-300', tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-danger' : 'bg-accent')}
+      className={cn('h-full rounded-full transition-[width] duration-300', tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-danger' : 'bg-gradient-to-r from-accent to-accent-2')}
       style={{ width: `${clamp(value, 0, 1) * 100}%` }}
     />
   </div>
@@ -62,7 +62,7 @@ export const ProgressBar: React.FC<{ value: number; className?: string; tone?: '
 
 export const Empty: React.FC<{ icon?: React.ReactNode; title: string; children?: React.ReactNode; className?: string }> = ({ icon, title, children, className }) => (
   <div className={cn('flex flex-col items-center justify-center gap-2 px-6 py-10 text-center', className)}>
-    {icon && <div className="text-dim">{icon}</div>}
+    {icon && <div className="tile size-14 rounded-2xl text-accent-2">{icon}</div>}
     <div className="font-semibold text-text">{title}</div>
     {children && <div className="max-w-xs text-xs leading-relaxed text-muted">{children}</div>}
   </div>
@@ -84,15 +84,15 @@ export const Modal: React.FC<{
 }> = ({ open, onOpenChange, title, description, children, footer, className, bodyClassName }) => (
   <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
+      <Dialog.Overlay className="fixed inset-0 z-50 bg-[#03040a]/55 backdrop-blur-md" />
       <Dialog.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[min(560px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-line bg-panel shadow-2xl outline-none',
+          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[min(560px,94vw)] -translate-x-1/2 -translate-y-1/2 glass-pop flex-col overflow-hidden rounded-2xl outline-none',
           className,
         )}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+        <div className="brand-hairline flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>
             <Dialog.Title className="text-base font-bold">{title}</Dialog.Title>
             {description ? <Dialog.Description className="mt-0.5 text-xs text-muted">{description}</Dialog.Description> : <Dialog.Description className="sr-only">{String(title)}</Dialog.Description>}
@@ -124,7 +124,7 @@ export const Menu: React.FC<{ trigger: React.ReactElement; items: (MenuItem | 's
   <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
     <DropdownMenu.Portal>
-      <DropdownMenu.Content align={align} sideOffset={4} className="z-[90] min-w-44 rounded-lg border border-line bg-panel-2 p-1 shadow-2xl">
+      <DropdownMenu.Content align={align} sideOffset={4} className="glass-pop z-[90] min-w-44 rounded-xl p-1">
         {items.map((it, i) =>
           it === 'separator' ? (
             <DropdownMenu.Separator key={i} className="my-1 h-px bg-line" />
@@ -138,7 +138,7 @@ export const Menu: React.FC<{ trigger: React.ReactElement; items: (MenuItem | 's
                 it.danger && 'text-danger',
               )}
             >
-              {it.icon && <span className="text-muted [&>svg]:size-4">{it.icon}</span>}
+              {it.icon && <span className={cn('[&>svg]:size-4', it.danger ? 'text-danger' : 'text-accent-2-ink')}>{it.icon}</span>}
               {it.label}
             </DropdownMenu.Item>
           ),
@@ -173,7 +173,7 @@ export const Switch: React.FC<{ checked: boolean; onChange: (v: boolean) => void
       checked={checked}
       onCheckedChange={onChange}
       disabled={disabled}
-      className="relative h-[18px] w-8 shrink-0 rounded-full bg-panel-3 transition-colors data-[state=checked]:bg-accent"
+      className="relative h-[18px] w-8 shrink-0 rounded-full bg-panel-3 transition-colors data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-accent data-[state=checked]:to-[#ff8a4c] data-[state=checked]:shadow-[0_0_12px_-2px_rgb(255_90_31/0.7)]"
     >
       <RSwitch.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[16px]" />
     </RSwitch.Root>
@@ -314,7 +314,7 @@ export const NumberField: React.FC<{
     window.addEventListener('pointerup', up);
   };
   return (
-    <label className={cn('flex min-w-0 items-center rounded-lg border border-line bg-panel-2 focus-within:border-accent', className)}>
+    <label className={cn('flex min-w-0 items-center rounded-lg border border-line bg-black/28 shadow-[inset_0_1px_2px_rgb(0_0_0/0.35)] focus-within:border-accent/80 focus-within:shadow-[0_0_0_3px_rgb(255_90_31/0.14)]', className)}>
       {label && (
         <span onPointerDown={scrub} className="cursor-ew-resize select-none whitespace-nowrap pl-2 pr-1 text-[11px] font-semibold uppercase tracking-wide text-dim hover:text-muted" title="Drag to adjust">
           {label}
@@ -390,9 +390,9 @@ export const RangeField: React.FC<{
     )}
     <Slider.Root className="relative flex h-4 w-full touch-none select-none items-center" value={[value]} min={min} max={max} step={step} onValueChange={(v) => onChange(v[0] ?? value)}>
       <Slider.Track className="relative h-1 grow rounded-full bg-panel-3">
-        <Slider.Range className="absolute h-full rounded-full bg-accent" />
+        <Slider.Range className="absolute h-full rounded-full bg-gradient-to-r from-accent-2 to-accent" />
       </Slider.Track>
-      <Slider.Thumb className="block size-3.5 rounded-full border-2 border-accent bg-white shadow outline-none focus-visible:ring-2 focus-visible:ring-accent/50" aria-label={label} />
+      <Slider.Thumb className="block size-3.5 rounded-full border-2 border-accent bg-white shadow-[0_0_10px_-1px_rgb(255_90_31/0.8)] outline-none focus-visible:ring-2 focus-visible:ring-accent/50" aria-label={label} />
     </Slider.Root>
   </div>
 );
@@ -441,7 +441,7 @@ export const Segmented = <T extends string>({
   className?: string;
   size?: 'sm' | 'md';
 }) => (
-  <div className={cn('inline-flex rounded-lg border border-line bg-panel-2 p-0.5', className)}>
+  <div className={cn('inline-flex rounded-[10px] border border-line bg-black/30 p-0.5 shadow-[inset_0_1px_2px_rgb(0_0_0/0.4)]', className)}>
     {options.map((o) => (
       <button
         key={o.value}
@@ -450,7 +450,7 @@ export const Segmented = <T extends string>({
         className={cn(
           'flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-semibold text-muted transition-colors hover:text-text',
           size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs',
-          value === o.value && 'bg-panel-3 text-text shadow',
+          value === o.value && 'bg-gradient-to-b from-white/[0.13] to-white/[0.07] text-text shadow-md shadow-black/40 ring-1 ring-white/[0.1] [&>svg]:text-accent',
         )}
       >
         {o.label}
@@ -473,7 +473,7 @@ export const Section: React.FC<{ title: React.ReactNode; defaultOpen?: boolean; 
   <Collapsible.Root defaultOpen={defaultOpen} className={cn('border-b border-line', className)}>
     <div className="flex items-center gap-2 px-3 py-2">
       <Collapsible.Trigger className="group flex flex-1 items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-muted hover:text-text">
-        <ChevronDown className="size-3.5 transition-transform group-data-[state=closed]:-rotate-90" />
+        <ChevronDown className="size-3.5 text-accent transition-transform group-data-[state=closed]:-rotate-90" />
         {title}
       </Collapsible.Trigger>
       {right}
@@ -486,7 +486,7 @@ export const Badge: React.FC<{ children: React.ReactNode; tone?: 'default' | 'ac
   <span
     className={cn(
       'chip',
-      tone === 'accent' && 'bg-accent/15 text-[#b9a8ff]',
+      tone === 'accent' && 'bg-accent/15 text-accent-ink',
       tone === 'ok' && 'bg-ok/15 text-ok',
       tone === 'warn' && 'bg-warn/15 text-warn',
       tone === 'danger' && 'bg-danger/15 text-danger',

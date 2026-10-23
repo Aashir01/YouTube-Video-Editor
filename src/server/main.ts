@@ -86,7 +86,7 @@ export const startServer = async (opts: StartOptions = {}) => {
   const url = `http://${host === '0.0.0.0' ? 'localhost' : host === '127.0.0.1' ? 'localhost' : host}:${port}`;
   if (!opts.quiet) {
     const f = ffInfo();
-    console.log(`\n  🎬 Director Studio is running → ${url}\n`);
+    console.log(`\n  🎬 Cutroom is running → ${url}\n`);
     console.log(`     MCP endpoint: ${url}/mcp`);
     console.log(`     Data folder:  ${DATA_DIR}`);
     console.log(`     FFmpeg:       ${f.available ? `${f.source}${f.full ? '' : ' (bundled build: scene detection/denoise disabled)'}` : 'NOT FOUND'}\n`);

@@ -37,7 +37,7 @@ api.onError((err, c) => {
 // Health & system
 // ---------------------------------------------------------------------------
 
-api.get('/health', (c) => c.json({ ok: true, name: 'Director Studio', time: new Date().toISOString() }));
+api.get('/health', (c) => c.json({ ok: true, name: 'Cutroom', time: new Date().toISOString() }));
 
 api.get('/system', async (c) => {
   const s = getSettings();

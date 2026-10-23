@@ -1,10 +1,10 @@
 ---
 name: editing-playbook
-description: Professional editing technique — cuts, pacing, b-roll, zooms, transitions, sound design, track usage in Director Studio.
+description: Professional editing technique — cuts, pacing, b-roll, zooms, transitions, sound design, track usage in Cutroom.
 ---
 # Editing playbook
 
-## Tracks in Director Studio (bottom → top)
+## Tracks in Cutroom (bottom → top)
 - **Main** (video): the primary sequence — the talking-head cut, or full-screen scenes/images/b-roll in faceless videos. Avoid gaps (black frames).
 - **B-roll** (overlay): cutaways that cover the speaker while their audio continues. Mute b-roll video (`muted: true`) unless its sound matters.
 - **Graphics** (overlay): lower thirds, callouts, text, subscribe reminders, transparent code scenes.

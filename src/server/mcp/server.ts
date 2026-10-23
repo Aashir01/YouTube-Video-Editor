@@ -19,7 +19,7 @@ const EXPORTED = () => BUILTIN_TOOLS.filter((t) => !t.uiOnly);
 const PROJECT_TOOLS = [
   {
     name: 'list_projects',
-    description: 'List Director Studio projects (most recent first).',
+    description: 'List Cutroom projects (most recent first).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -49,7 +49,7 @@ export const createMcpServer = (state: McpSessionState): Server => {
     {
       capabilities: { tools: {}, prompts: {} },
       instructions:
-        'Director Studio is an agentic YouTube video editor. Create or select a project first (create_project / select_project), add media with import_file, then use the editing, generation, motion-graphics, review and render tools. Every change appears live in the Director Studio editor UI. Load expert playbooks with load_skill before scripting, editing footage, designing graphics or writing code scenes.',
+        'Cutroom is an agentic YouTube video editor. Create or select a project first (create_project / select_project), add media with import_file, then use the editing, generation, motion-graphics, review and render tools. Every change appears live in the Cutroom editor UI. Load expert playbooks with load_skill before scripting, editing footage, designing graphics or writing code scenes.',
     },
   );
 
@@ -115,7 +115,7 @@ export const createMcpServer = (state: McpSessionState): Server => {
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({
     prompts: [
-      { name: 'produce_video', description: 'Produce a complete YouTube video from a topic with Director Studio', arguments: [{ name: 'topic', required: true }, { name: 'format', description: 'long or short' }, { name: 'length', description: 'target length, e.g. "8 minutes"' }] },
+      { name: 'produce_video', description: 'Produce a complete YouTube video from a topic with Cutroom', arguments: [{ name: 'topic', required: true }, { name: 'format', description: 'long or short' }, { name: 'length', description: 'target length, e.g. "8 minutes"' }] },
       { name: 'edit_footage', description: 'Edit raw footage into a polished YouTube video', arguments: [{ name: 'files', description: 'absolute paths of the footage, comma separated', required: true }, { name: 'notes' }] },
     ],
   }));
@@ -127,7 +127,7 @@ export const createMcpServer = (state: McpSessionState): Server => {
       req.params.name === 'edit_footage'
         ? `Edit this footage into a polished YouTube video: ${a.files}. Notes: ${a.notes ?? 'none'}. Create a project, import the files with import_file, then follow the talking-head recipe (load_skill recipe-talking-head).`
         : `Produce a YouTube ${a.format === 'short' ? 'Short (9:16)' : 'video (16:9)'} about: ${a.topic}${a.length ? `, about ${a.length} long` : ''}. Create a project, then follow the faceless explainer recipe (load_skill recipe-faceless-explainer). Ask me before spending on voiceover.`;
-    return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `You are driving Director Studio through its MCP tools. Follow this operating manual (the ask_user/update_plan/delegate tools are not available over MCP — ask me directly in chat):\n\n${playbook}\n\n---\n${task}` } }] };
+    return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `You are driving Cutroom through its MCP tools. Follow this operating manual (the ask_user/update_plan/delegate tools are not available over MCP — ask me directly in chat):\n\n${playbook}\n\n---\n${task}` } }] };
   });
 
   return server;

@@ -139,8 +139,8 @@ export const QuestionCard: React.FC<{ m: QuestionMsg }> = ({ m }) => {
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-accent/50 bg-gradient-to-b from-accent/10 to-panel-2 shadow-lg shadow-accent/5">
-      <div className="flex items-center gap-1.5 border-b border-accent/20 px-3 py-2 text-[12px] font-bold text-[#c9bcff]">
+    <div className="overflow-hidden rounded-xl border border-accent-2/50 bg-gradient-to-b from-accent-2/15 to-panel-2 shadow-[0_12px_40px_-16px_rgb(139_123_255/0.5)]">
+      <div className="flex items-center gap-1.5 border-b border-accent-2/20 px-3 py-2 text-[12px] font-bold text-accent-2-ink">
         <CircleHelp className="size-4" /> {m.payload.title ?? 'A few questions'}
       </div>
       <div className="flex flex-col gap-4 px-3 py-3">

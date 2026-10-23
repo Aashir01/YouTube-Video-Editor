@@ -21,7 +21,7 @@ import { ExportDialog } from './ExportDialog';
 /** Drag handle between panels. */
 const Resizer: React.FC<{ dir: 'x' | 'y'; onDrag: (delta: number) => void; className?: string }> = ({ dir, onDrag, className }) => (
   <div
-    className={cn('group relative z-10 shrink-0', dir === 'x' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize', className)}
+    className={cn('group relative z-10 shrink-0', dir === 'x' ? 'w-2 cursor-col-resize' : 'h-2 cursor-row-resize', className)}
     onPointerDown={(e) => {
       e.preventDefault();
       let last = dir === 'x' ? e.clientX : e.clientY;
@@ -40,7 +40,7 @@ const Resizer: React.FC<{ dir: 'x' | 'y'; onDrag: (delta: number) => void; class
       window.addEventListener('pointerup', up);
     }}
   >
-    <div className={cn('absolute bg-accent opacity-0 transition-opacity group-hover:opacity-70', dir === 'x' ? 'inset-y-0 left-0 w-0.5' : 'inset-x-0 top-0 h-0.5')} />
+    <div className={cn('absolute rounded-full bg-accent opacity-0 shadow-[0_0_10px_rgb(255_90_31/0.8)] transition-opacity group-hover:opacity-80', dir === 'x' ? 'inset-y-6 left-1/2 w-0.5 -translate-x-1/2' : 'inset-x-6 top-1/2 h-0.5 -translate-y-1/2')} />
   </div>
 );
 
@@ -134,7 +134,7 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
   }, [projectId, openProject, closeProject]);
 
   useEffect(() => {
-    if (project) document.title = `${project.name} — Director Studio`;
+    if (project) document.title = `${project.name} — Cutroom`;
   }, [project?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // send the topic typed on the home screen as the first message
@@ -178,29 +178,30 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
   return (
     <div className="flex h-full flex-col">
       <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <div style={{ width: leftW }} className="flex min-w-0 shrink-0 flex-col border-r border-line bg-panel">
+      {/* floating glass panels with gutters (the gutters are the resize handles) */}
+      <div className="flex min-h-0 flex-1 px-2 pb-2">
+        <div style={{ width: leftW }} className="glass flex min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl">
           <LeftPanel />
         </div>
-        <Resizer dir="x" onDrag={(d) => setLeftW((w) => clamp(w + d, 240, 520))} className="-ml-0.5 -mr-0.5" />
+        <Resizer dir="x" onDrag={(d) => setLeftW((w) => clamp(w + d, 240, 520))} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1">
+          <div className="glass min-h-0 flex-1 overflow-hidden rounded-2xl">
             <Preview />
           </div>
-          <Resizer dir="y" onDrag={(d) => setTimelineH((h) => clamp(h - d, 150, window.innerHeight * 0.7))} className="-mt-0.5 -mb-0.5" />
-          <div style={{ height: timelineH }} className="shrink-0 border-t border-line bg-panel">
+          <Resizer dir="y" onDrag={(d) => setTimelineH((h) => clamp(h - d, 150, window.innerHeight * 0.7))} />
+          <div style={{ height: timelineH }} className="glass shrink-0 overflow-hidden rounded-2xl">
             <Timeline />
           </div>
         </div>
-        <Resizer dir="x" onDrag={(d) => setRightW((w) => clamp(w - d, 320, 720))} className="-ml-0.5 -mr-0.5" />
-        <div style={{ width: rightW }} className="flex min-w-0 shrink-0 flex-col border-l border-line bg-panel">
-          <div className="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
+        <Resizer dir="x" onDrag={(d) => setRightW((w) => clamp(w - d, 320, 720))} />
+        <div style={{ width: rightW }} className="glass flex min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl">
+          <div className="flex shrink-0 items-center gap-1 border-b border-line bg-white/[0.02] px-2 py-1.5">
             <TabButton active={rightTab === 'director'} onClick={() => setRightTab('director')}>
-              <Bot className="size-4" /> Director
-              {busy && rightTab !== 'director' && <span className="typing-dot size-1.5 rounded-full bg-accent" />}
+              <Bot className={cn('size-4', rightTab === 'director' && 'text-accent-2')} /> Director
+              {busy && rightTab !== 'director' && <span className="typing-dot size-1.5 rounded-full bg-accent-2" />}
             </TabButton>
             <TabButton active={rightTab === 'inspector'} onClick={() => setRightTab('inspector')}>
-              <SlidersHorizontal className="size-4" /> Inspector
+              <SlidersHorizontal className={cn('size-4', rightTab === 'inspector' && 'text-hue-sky')} /> Inspector
               {selectionCount > 0 && <span className="rounded-full bg-panel-3 px-1.5 text-[10px] text-muted">{selectionCount}</span>}
             </TabButton>
           </div>
@@ -215,7 +216,7 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
 export const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode; className?: string }> = ({ active, onClick, children, className }) => (
   <button
     onClick={onClick}
-    className={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-semibold text-muted transition-colors hover:text-text', active && 'bg-panel-3 text-text', className)}
+    className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[13px] font-semibold text-muted transition-colors hover:bg-panel-2 hover:text-text', active && 'bg-white/[0.09] text-text shadow-sm shadow-black/30 ring-1 ring-white/[0.1]', className)}
   >
     {children}
   </button>

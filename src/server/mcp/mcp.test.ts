@@ -28,7 +28,7 @@ describe('MCP server (Streamable HTTP)', () => {
   it('lists tools, creates a project and edits it like an external agent would', async () => {
     const client = new Client({ name: 'test-client', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`)));
-    expect(client.getInstructions()).toContain('Director Studio');
+    expect(client.getInstructions()).toContain('Cutroom');
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
     for (const n of ['create_project', 'import_file', 'apply_edits', 'add_scene', 'write_code_scene', 'render_video', 'auto_cut', 'generate_voiceover']) expect(names).toContain(n);

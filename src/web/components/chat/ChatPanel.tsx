@@ -31,7 +31,7 @@ const groupMessages = (messages: ChatMessage[]): Item[] => {
 };
 
 const AgentBadge: React.FC<{ agent: string }> = ({ agent }) => (
-  <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-accent-2/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-2">{agent.replace('_', ' ')}</span>
+  <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-accent-2/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-2-ink ring-1 ring-accent-2/25">{agent.replace('_', ' ')}</span>
 );
 
 const MarkdownText: React.FC<{ text: string }> = React.memo(({ text }) => (
@@ -57,7 +57,7 @@ const MessageView: React.FC<{ m: ChatMessage }> = React.memo(({ m }) => {
     case 'user':
       return (
         <div className="flex justify-end">
-          <div className="max-w-[88%] rounded-2xl rounded-br-md bg-accent/90 px-3 py-2 text-[13px] leading-relaxed text-white shadow">
+          <div className="max-w-[88%] rounded-2xl rounded-br-md bg-gradient-to-br from-[#ff6a30] to-[#e8460f] px-3 py-2 text-[13px] leading-relaxed text-white shadow-[0_8px_24px_-12px_rgb(255_90_31/0.8)] ring-1 ring-white/15">
             <div className="whitespace-pre-wrap break-words">{m.text}</div>
             {m.attachments && m.attachments.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
@@ -77,7 +77,7 @@ const MessageView: React.FC<{ m: ChatMessage }> = React.memo(({ m }) => {
         <div className={cn(m.agent && 'ml-3 border-l-2 border-accent-2/30 pl-3')}>
           {m.agent && <AgentBadge agent={m.agent} />}
           <MarkdownText text={m.text} />
-          {m.streaming && <span className="typing-dot ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-accent" />}
+          {m.streaming && <span className="typing-dot ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-accent-2" />}
         </div>
       );
     case 'question':
@@ -102,17 +102,19 @@ const PlanView: React.FC<{ plan: PlanItem[] }> = ({ plan }) => {
   const done = plan.filter((p) => p.status === 'done' || p.status === 'skipped').length;
   const current = plan.find((p) => p.status === 'in_progress');
   return (
-    <div className="border-b border-line bg-panel px-3 py-2">
+    <div className="border-b border-line bg-white/[0.02] px-3 py-2">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left">
-        <ListTodo className="size-4 text-accent" />
+        <span className="tile size-6 rounded-md text-hue-amber">
+          <ListTodo className="size-3.5" />
+        </span>
         <span className="text-xs font-bold">Plan</span>
         <span className="text-[11px] text-dim">
           {done}/{plan.length}
           {!open && current ? ` · ${current.title}` : ''}
         </span>
         <span className="flex-1" />
-        <div className="h-1 w-16 overflow-hidden rounded-full bg-panel-3">
-          <div className="h-full bg-ok transition-[width]" style={{ width: `${(done / Math.max(1, plan.length)) * 100}%` }} />
+        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-panel-3">
+          <div className="h-full rounded-full bg-gradient-to-r from-hue-mint to-ok shadow-[0_0_8px_rgb(34_211_154/0.6)] transition-[width]" style={{ width: `${(done / Math.max(1, plan.length)) * 100}%` }} />
         </div>
         <ChevronDown className={cn('size-3.5 text-dim transition-transform', !open && '-rotate-90')} />
       </button>
@@ -155,10 +157,10 @@ const Welcome: React.FC<{ onPick: (t: string) => void }> = ({ onPick }) => {
   const starters = STARTERS.filter((s) => !s.when || s.when(ctx)).slice(0, 4);
   return (
     <div className="flex flex-col items-center px-5 pb-6 pt-10 text-center">
-      <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-2 shadow-lg shadow-accent/20">
-        <Bot className="size-6 text-white" />
+      <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent via-[#ff4f6d] to-accent-2 shadow-[0_12px_40px_-10px_rgb(255_90_31/0.7)] ring-1 ring-white/20">
+        <Bot className="size-7 text-white" />
       </div>
-      <h3 className="text-base font-bold">I’m your Director</h3>
+      <h3 className="text-lg font-bold tracking-tight">I’m your Director</h3>
       <p className="mt-1 max-w-[300px] text-xs leading-relaxed text-muted">
         Tell me what you want to make. I’ll ask for what I need, then script, edit, animate, caption, add music and package it for YouTube — live on your timeline.
       </p>
@@ -173,7 +175,7 @@ const Welcome: React.FC<{ onPick: (t: string) => void }> = ({ onPick }) => {
       )}
       <div className="mt-5 grid w-full grid-cols-2 gap-2">
         {starters.map((s) => (
-          <button key={s.title} onClick={() => onPick(s.text)} className="rounded-xl border border-line bg-panel-2 px-3 py-2.5 text-left transition-colors hover:border-accent/60">
+          <button key={s.title} onClick={() => onPick(s.text)} className="rounded-xl border border-line bg-panel-2 px-3 py-2.5 text-left transition-all hover:-translate-y-px hover:border-accent-2/60 hover:bg-panel-3">
             <div className="text-xs font-semibold">{s.title}</div>
             <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-dim">{s.text}</div>
           </button>
@@ -279,9 +281,9 @@ const Composer: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-line bg-panel p-2.5">
+    <div className="border-t border-line bg-black/15 p-2.5">
       <div
-        className="rounded-xl border border-line bg-panel-2 focus-within:border-accent/70"
+        className="rounded-xl border border-line-2 bg-black/25 transition-shadow focus-within:border-accent/70 focus-within:shadow-[0_0_0_3px_rgb(255_90_31/0.14),0_10px_30px_-12px_rgb(255_90_31/0.4)]"
         onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
         onDrop={(e) => {
           if (!e.dataTransfer.files.length) return;
@@ -336,7 +338,7 @@ const Composer: React.FC = () => {
               <Square className="size-3" fill="currentColor" /> Stop
             </button>
           )}
-          <button className="flex size-7 items-center justify-center rounded-lg bg-accent text-white transition-opacity disabled:opacity-35" disabled={!text.trim() || sending} onClick={() => void send()} aria-label="Send">
+          <button className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-b from-[#ff7440] to-[#f04a10] text-white shadow-[0_4px_14px_-4px_rgb(255_90_31/0.8)] transition-opacity disabled:opacity-35 disabled:shadow-none" disabled={!text.trim() || sending} onClick={() => void send()} aria-label="Send">
             {sending ? <Spinner className="size-3.5" /> : <ArrowUp className="size-4" />}
           </button>
         </div>
@@ -364,11 +366,11 @@ export const ChatPanel: React.FC = () => {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line bg-black/15 px-3">
         <span className="min-w-0 flex-1 truncate text-[11px] text-dim" title={model ?? ''}>
           {model ? (
             <>
-              <span className="mr-1 inline-block size-1.5 rounded-full bg-ok align-middle" /> {model}
+              <span className="mr-1 inline-block size-1.5 rounded-full bg-ok align-middle shadow-[0_0_6px_rgb(34_211_154/0.9)]" /> <span className="text-muted">{model}</span>
             </>
           ) : (
             <button className="text-warn hover:underline" onClick={() => openSettings('models')}>

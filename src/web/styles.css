@@ -1,20 +1,35 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-bg: #08090d;
-  --color-panel: #101219;
-  --color-panel-2: #161923;
-  --color-panel-3: #1d2130;
-  --color-line: #262b3a;
-  --color-line-2: #333a4e;
-  --color-muted: #8a92a8;
-  --color-dim: #5d6479;
-  --color-text: #e9ebf3;
-  --color-accent: #7c5cff;
-  --color-accent-2: #22d3ee;
-  --color-warn: #f5a524;
-  --color-danger: #f0506e;
-  --color-ok: #2fcf7a;
+  /* surfaces: frosted glass over a lit backdrop. panel = a glass slab; panel-2/3 = light layers on top of it */
+  --color-bg: #05060a;
+  --color-panel: rgb(14 16 26 / 0.4);
+  --color-panel-2: rgb(255 255 255 / 0.045);
+  --color-panel-3: rgb(255 255 255 / 0.085);
+  --color-line: rgb(255 255 255 / 0.075);
+  --color-line-2: rgb(255 255 255 / 0.13);
+  /* opaque glass for things that float over content (menus, sticky headers) */
+  --color-solid: #0f111a;
+  --color-muted: #a3abc1;
+  --color-dim: #6b7391;
+  --color-text: #f1f2f7;
+  /* brand: signal orange (the playhead in the logo) + violet for the Director */
+  --color-accent: #ff5a1f;
+  --color-accent-ink: #ffb596;
+  --color-accent-2: #8b7bff;
+  --color-accent-2-ink: #c7beff;
+  --color-warn: #ffb020;
+  --color-danger: #ff4d6d;
+  --color-ok: #22d39a;
+  /* category hues: one per area of the editor, matching the timeline clip colors */
+  --color-hue-sky: #38bdf8;
+  --color-hue-violet: #8b7bff;
+  --color-hue-mint: #2dd4bf;
+  --color-hue-green: #34d399;
+  --color-hue-amber: #fbbf24;
+  --color-hue-pink: #f472b6;
+  --color-hue-ember: #ff6a3d;
+  --color-hue-yellow: #e5e14a;
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 }
@@ -27,21 +42,54 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  /* the lit backdrop every glass surface sits on */
+  background:
+    radial-gradient(1100px 760px at -8% -12%, rgb(255 90 31 / 0.42), transparent 60%),
+    radial-gradient(1000px 760px at 108% -8%, rgb(139 123 255 / 0.44), transparent 60%),
+    radial-gradient(900px 640px at 50% 55%, rgb(255 79 109 / 0.1), transparent 65%),
+    radial-gradient(1000px 760px at 80% 112%, rgb(45 212 191 / 0.26), transparent 60%),
+    radial-gradient(900px 640px at -2% 108%, rgb(244 114 182 / 0.24), transparent 60%),
+    var(--color-bg);
+  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 13px;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
+/* fine film grain over the backdrop (under the UI) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+select option {
+  background: var(--color-solid);
+}
+
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2b3142 transparent;
+  scrollbar-color: #2c3246 transparent;
 }
 
 ::selection {
-  background: rgb(124 92 255 / 0.45);
+  background: rgb(255 90 31 / 0.4);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(255 90 31 / 0.7);
+  outline-offset: 1px;
 }
 
 @layer base {
@@ -58,15 +106,20 @@ body {
 @layer components {
   .field {
     width: 100%;
-    border-radius: 8px;
+    border-radius: 9px;
     border: 1px solid var(--color-line);
-    background: var(--color-panel-2);
+    background: rgb(0 0 0 / 0.28);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
     padding: 6px 10px;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field:hover {
+    border-color: var(--color-line-2);
   }
   .field:focus {
-    border-color: var(--color-accent);
+    border-color: rgb(255 90 31 / 0.8);
+    box-shadow: 0 0 0 3px rgb(255 90 31 / 0.16);
   }
   textarea.field {
     resize: vertical;
@@ -78,35 +131,42 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    border-radius: 8px;
+    border-radius: 9px;
     padding: 6px 12px;
     font-weight: 600;
-    border: 1px solid var(--color-line);
-    background: var(--color-panel-2);
+    border: 1px solid rgb(255 255 255 / 0.1);
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.035));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3);
+    backdrop-filter: blur(12px);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s, box-shadow 0.15s, filter 0.15s;
     white-space: nowrap;
   }
   .btn:hover {
-    background: var(--color-panel-3);
-    border-color: var(--color-line-2);
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.06));
+    border-color: rgb(255 255 255 / 0.17);
   }
   .btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
   .btn-primary {
-    background: var(--color-accent);
-    border-color: transparent;
+    background: linear-gradient(180deg, #ff7440 0%, #f04a10 100%);
+    border-color: rgb(255 140 90 / 0.5);
     color: white;
+    text-shadow: 0 1px 0 rgb(120 30 0 / 0.35);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28), 0 6px 20px -8px rgb(255 90 31 / 0.75);
   }
   .btn-primary:hover {
-    background: #8d71ff;
-    border-color: transparent;
+    background: linear-gradient(180deg, #ff8452 0%, #ff5a1f 100%);
+    border-color: rgb(255 160 120 / 0.6);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.32), 0 8px 26px -8px rgb(255 90 31 / 0.9);
   }
   .btn-ghost {
     background: transparent;
     border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
   .btn-ghost:hover {
     background: var(--color-panel-3);
@@ -143,6 +203,71 @@ body {
     text-transform: uppercase;
     color: var(--color-muted);
     margin-bottom: 4px;
+  }
+
+  /* An icon on a tinted square in its own color: put a text-hue-* class on it. */
+  .tile {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: color-mix(in oklab, currentColor 15%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 26%, transparent);
+  }
+
+  /* Frosted glass slab: translucent, blurred, with a lit top edge. */
+  .glass {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.012) 38%), var(--color-panel);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgb(255 255 255 / 0.085);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 24px 60px -28px rgb(0 0 0 / 0.75);
+  }
+  /* Thicker glass for things that float over content: menus, popovers, dialogs, tooltips. */
+  .glass-pop {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.02) 40%), rgb(15 17 27 / 0.8);
+    backdrop-filter: blur(30px) saturate(170%);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    border: 1px solid rgb(255 255 255 / 0.12);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 30px 80px -20px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.3);
+  }
+
+  /* Hairline gradient border (ember → violet → mint) drawn with a mask, so the fill can stay translucent. */
+  .ring-gradient {
+    position: relative;
+  }
+  .ring-gradient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgb(255 106 61 / 0.8), rgb(139 123 255 / 0.6) 50%, rgb(45 212 191 / 0.5));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .text-gradient {
+    background: linear-gradient(95deg, #ff8a4c 0%, #ff4f6d 45%, #8b7bff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Hairline under a header that picks up the brand colors. */
+  .brand-hairline {
+    position: relative;
+  }
+  .brand-hairline::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(255 90 31 / 0.55) 20%, rgb(139 123 255 / 0.45) 55%, rgb(45 212 191 / 0.35) 80%, transparent);
+    pointer-events: none;
   }
 
   .markdown p {
@@ -194,8 +319,21 @@ body {
     margin: 0.6em 0 0.3em;
   }
   .markdown a {
-    color: var(--color-accent-2);
+    color: var(--color-accent-2-ink);
     text-decoration: underline;
+    text-decoration-color: rgb(139 123 255 / 0.5);
+    text-underline-offset: 2px;
+  }
+  .markdown h2,
+  .markdown h3 {
+    color: white;
+  }
+  .markdown ul li::marker {
+    color: var(--color-accent);
+  }
+  .markdown ol li::marker {
+    color: var(--color-accent-2-ink);
+    font-weight: 600;
   }
   .markdown table {
     border-collapse: collapse;
@@ -223,6 +361,13 @@ select.field {
 }
 .typing-dot {
   animation: pulse-dot 1.2s infinite;
+}
+
+/* Faint dot grid for the preview stage. */
+.stage-grid {
+  background-color: rgb(0 0 0 / 0.32);
+  background-image: radial-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
 }
 
 .checker {

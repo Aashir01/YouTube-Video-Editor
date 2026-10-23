@@ -175,7 +175,7 @@ const Motion: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip,
             </button>
           </div>
           {clip.zooms.map((z, i) => (
-            <div key={i} className="relative grid grid-cols-2 gap-1.5 rounded-lg border border-line bg-panel p-2 pr-7">
+            <div key={i} className="relative grid grid-cols-2 gap-1.5 rounded-lg border border-line bg-black/20 p-2 pr-7">
               <button className="absolute right-1 top-1 rounded p-0.5 text-dim hover:text-danger" onClick={() => patch({ zooms: clip.zooms.filter((_, j) => j !== i) })} title="Remove zoom">
                 <X className="size-3.5" />
               </button>

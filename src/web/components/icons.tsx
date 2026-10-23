@@ -14,16 +14,13 @@ export const YouTubeIcon: React.FC<{ className?: string }> = ({ className }) => 
 );
 
 export const Logo: React.FC<{ className?: string }> = ({ className }) => (
+  // Cutroom mark: a play triangle split by a timeline playhead
   <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-    <defs>
-      <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#8b6cff" />
-        <stop offset="1" stopColor="#22d3ee" />
-      </linearGradient>
-    </defs>
-    <rect width="64" height="64" rx="16" fill="url(#logo-g)" />
-    <path d="M25 19.5 46 32 25 44.5Z" fill="white" />
-    <circle cx="18" cy="32" r="3.2" fill="white" opacity="0.85" />
+    <rect width="64" height="64" rx="14" fill="#ede9e1" />
+    <path d="M21 17 29.5 21.72V42.28L21 47Z" fill="#111318" />
+    <path d="M34.5 24.5 48 32 34.5 39.5Z" fill="#111318" />
+    <path d="M28 11h8v3l-4 4-4-4Z" fill="#ff4f1f" />
+    <rect x="31" y="16" width="2" height="38" rx="1" fill="#ff4f1f" />
   </svg>
 );
 
