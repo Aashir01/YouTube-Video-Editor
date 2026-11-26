@@ -255,7 +255,7 @@ api.put('/projects/:id/assets/:assetId/transcript', async (c) => {
   await store.update(id, 'Edit transcript', (p) => {
     const a = p.assets.find((x) => x.id === assetId);
     if (a) a.transcript = { ...a.transcript, status: 'done', file, wordCount: words.length, engine: a.transcript.engine ?? 'manual', preview: words.slice(0, 60).map((w) => w.text).join(' ') };
-  }, { source: 'user' });
+  }, { source: 'user', history: false }); // a spelling fix, not an edit: undo can't restore transcript files anyway
   return c.json({ ok: true });
 });
 

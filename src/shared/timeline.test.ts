@@ -20,6 +20,9 @@ import {
   summarizeProject,
   timelineWords,
   trimClip,
+  fillerRanges,
+  pauseRanges,
+  rangesDuration,
 } from './timeline';
 
 const withVideoAsset = (p: Project, id = 'asset_a', duration = 60): Project => {
@@ -258,5 +261,19 @@ describe('lint and summary', () => {
     const s = summarizeProject(p);
     expect(s).toContain('asset_a');
     expect(s).toContain('c1 video');
+  });
+});
+
+describe('transcript-driven cuts', () => {
+  const w = (text: string, start: number, end: number) => ({ text, start, end });
+  const words = [w('So', 0, 0.3), w('um,', 0.4, 0.7), w('uh', 0.72, 0.9), w('the', 1, 1.2), w('point', 2.6, 3), w('is', 3.1, 3.3)];
+
+  it('finds filler words and merges neighbours', () => {
+    expect(fillerRanges(words)).toEqual([[0.4, 0.9]]);
+  });
+
+  it('shortens long pauses to the kept length', () => {
+    expect(pauseRanges(words, 0.7, 0.3)).toEqual([[1.35, 2.45]]);
+    expect(rangesDuration(pauseRanges(words, 0.7, 0.3))).toBe(1.1);
   });
 });
