@@ -66,6 +66,7 @@ import {
   duplicateSelection,
   jumpToEdit,
   liftRangeMarks,
+  makeShort,
   markIn,
   markOut,
   pasteAtPlayhead,
@@ -150,6 +151,8 @@ export const buildCommands = (): Command[] => {
     { id: 'delete-range', group: 'Markers & range', title: 'Delete range (close the gap)', icon: Trash2, run: rippleDeleteRange, when: hasRange },
     { id: 'lift-range', group: 'Markers & range', title: 'Lift range (keep the gap)', icon: Eraser, run: liftRangeMarks, when: hasRange },
     { id: 'clear-range', group: 'Markers & range', title: 'Clear range', icon: Eraser, shortcut: 'Alt+X', run: clearRangeMarks, when: hasRange },
+    { id: 'short-range', group: 'Markers & range', title: 'Make a Short from the range', icon: Smartphone, run: () => void makeShort([st().range!]), when: hasRange, keywords: 'vertical repurpose 9:16 clip' },
+    { id: 'export-range', group: 'Markers & range', title: 'Export the range…', icon: Download, run: () => st().setExportOpen(true), when: hasRange },
     // add
     { id: 'add-title', group: 'Add', title: 'Add a title', icon: Type, run: () => void addAtPlayhead({ kind: 'text', preset: 'title' }), keywords: 'text heading' },
     { id: 'add-lower', group: 'Add', title: 'Add a lower third', icon: Type, run: () => void addAtPlayhead({ kind: 'text', preset: 'lower' }), keywords: 'name text' },

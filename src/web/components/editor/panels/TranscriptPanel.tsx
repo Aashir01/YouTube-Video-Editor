@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Captions, Clock, Copy, CornerDownLeft, Mic, Play, Scissors, Search, SquareDashedMousePointer, Wand } from 'lucide-react';
+import { Captions, Clock, Copy, CornerDownLeft, Mic, Play, Scissors, Search, Smartphone, SquareDashedMousePointer, Wand } from 'lucide-react';
 import type { Word } from '../../../../shared/schema';
 import { fillerRanges, formatTime, isFiller, pauseRanges, rangesDuration, speechClips, timelineWordsDetailed, type TimelineWord } from '../../../../shared/timeline';
 import { api } from '../../../lib/api';
 import { useStudio } from '../../../lib/store';
 import { player } from '../../../lib/player';
-import { cutRanges } from '../../../lib/actions';
+import { cutRanges, makeShort } from '../../../lib/actions';
 import { cn, copyText, errorText, formatClock } from '../../../lib/utils';
 import { Empty, Spinner, Tip } from '../../ui';
 import { PanelHeader } from '../LeftPanel';
@@ -249,6 +249,11 @@ export const TranscriptPanel: React.FC = () => {
           <Tip label="Use as in/out range">
             <button className="rounded p-1 text-muted hover:bg-panel-3 hover:text-text" aria-label="Set range" onClick={() => useStudio.setState({ range: selTime })}>
               <SquareDashedMousePointer className="size-3.5" />
+            </button>
+          </Tip>
+          <Tip label="Make a vertical Short from these words">
+            <button className="rounded p-1 text-muted hover:bg-panel-3 hover:text-hue-pink" aria-label="Make a Short" onClick={() => void makeShort([selTime])}>
+              <Smartphone className="size-3.5" />
             </button>
           </Tip>
           <Tip label="Copy text">

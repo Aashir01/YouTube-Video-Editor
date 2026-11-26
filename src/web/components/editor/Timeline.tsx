@@ -19,6 +19,7 @@ import {
   Repeat,
   Rows3,
   Scissors,
+  Smartphone,
   Trash2,
   Volume2,
   VolumeX,
@@ -33,7 +34,7 @@ import type { EditOp } from '../../../shared/ops';
 import { getClipRef, useStudio } from '../../lib/store';
 import { player } from '../../lib/player';
 import { prefs } from '../../lib/prefs';
-import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead } from '../../lib/actions';
+import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, makeShort, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead } from '../../lib/actions';
 import { api } from '../../lib/api';
 import { activeDrag, clearDragPayload, DND_TYPE, dropFiles, dropPayload, readDragPayload } from '../../lib/dnd';
 import { cn, clamp, formatClock, formatTimecode, modKey } from '../../lib/utils';
@@ -712,6 +713,11 @@ export const Timeline: React.FC = () => {
             <Tip label="Loop the range">
               <button className={cn('rounded p-1 hover:bg-panel-3', loopRange ? 'text-accent-2-ink' : 'text-dim')} onClick={() => useStudio.setState({ loopRange: !loopRange })} aria-label="Loop range">
                 <Repeat className="size-3.5" />
+              </button>
+            </Tip>
+            <Tip label="Make a vertical Short from the range">
+              <button className="rounded p-1 text-dim hover:bg-panel-3 hover:text-hue-pink" onClick={() => void makeShort([range])} aria-label="Make a Short">
+                <Smartphone className="size-3.5" />
               </button>
             </Tip>
             <Tip label="Delete range and close the gap">

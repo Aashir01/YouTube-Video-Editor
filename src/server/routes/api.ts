@@ -5,7 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { WordSchema } from '../../shared/schema';
 import { applyOps, describeOps, type EditOp } from '../../shared/ops';
-import { lintProject } from '../../shared/timeline';
+import { lintProject, projectDuration } from '../../shared/timeline';
 import { createDemoProject } from '../../shared/sample';
 import { TEMPLATE_IDS, templateCatalog } from '../../shared/templates';
 import { FONTS } from '../../shared/fonts';
@@ -22,6 +22,7 @@ import { localWhisperAvailable, pickTranscriptionEngine } from '../services/tran
 import { listModels, testModel } from '../ai/llm';
 import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
+import { createShort } from '../shorts';
 import { importOptional } from '../optional';
 
 export const api = new Hono();
@@ -140,6 +141,15 @@ api.delete('/projects/:id', async (c) => {
 });
 
 api.post('/projects/:id/duplicate', async (c) => c.json(await store.duplicate(c.req.param('id'))));
+
+/** Cut time ranges of this video into a new vertical Short project. */
+api.post('/projects/:id/shorts', async (c) => {
+  const body = z
+    .object({ ranges: z.array(z.tuple([z.number(), z.number()])).min(1).max(20), title: z.string().max(120).optional(), focusX: z.number().min(0).max(1).optional() })
+    .parse(await c.req.json());
+  const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
+  return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
+});
 
 api.post('/projects/:id/ops', async (c) => {
   const id = c.req.param('id');
@@ -288,7 +298,7 @@ api.post('/projects/:id/assets/:assetId/analyze', async (c) => {
 
 api.post('/projects/:id/render', async (c) => {
   const body = z
-    .object({ preset: z.enum(Object.keys(RENDER_PRESETS) as [RenderPreset, ...RenderPreset[]]).optional(), range: z.tuple([z.number(), z.number()]).optional(), normalize: z.boolean().optional() })
+    .object({ preset: z.enum(Object.keys(RENDER_PRESETS) as [RenderPreset, ...RenderPreset[]]).optional(), range: z.tuple([z.number(), z.number()]).optional(), normalize: z.boolean().optional(), audioOnly: z.boolean().optional() })
     .parse(await c.req.json().catch(() => ({})));
   return c.json(await startRender(c.req.param('id'), body));
 });
@@ -299,7 +309,7 @@ api.delete('/projects/:id/render/:renderId', async (c) => {
   const id = c.req.param('id');
   const renderId = c.req.param('renderId');
   cancelRender(renderId);
-  for (const ext of ['.mp4', '.srt', '.raw.mp4']) await fsp.rm(store.renderPath(id, `${renderId}${ext}`), { force: true });
+  for (const ext of ['.mp4', '.mp3', '.m4a', '.srt', '.raw.mp4', '.raw.wav']) await fsp.rm(store.renderPath(id, `${renderId}${ext}`), { force: true });
   await store.update(id, 'Delete render', (p) => void (p.renders = p.renders.filter((r) => r.id !== renderId)), { history: false, source: 'user' });
   return c.json({ ok: true });
 });

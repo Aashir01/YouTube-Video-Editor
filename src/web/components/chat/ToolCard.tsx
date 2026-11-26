@@ -66,6 +66,7 @@ const TOOL_META: Record<string, { label: string; running: string; icon: React.El
   design_thumbnail: { label: 'Designed the thumbnail', running: 'Designing the thumbnail', icon: ImageIcon },
   set_youtube_metadata: { label: 'Wrote title & description', running: 'Writing title & description', icon: YouTubeIcon },
   render_video: { label: 'Rendered the video', running: 'Rendering the video', icon: Clapperboard },
+  create_short: { label: 'Made a Short', running: 'Cutting a Short', icon: Clapperboard },
   upload_to_youtube: { label: 'Uploaded to YouTube', running: 'Uploading to YouTube', icon: Upload },
   set_brief: { label: 'Saved the brief', running: 'Saving the brief', icon: FileText },
   set_brand: { label: 'Saved the brand', running: 'Saving the brand', icon: Palette },
