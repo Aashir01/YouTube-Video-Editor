@@ -38,6 +38,7 @@ const TOOL_META: Record<string, { label: string; running: string; icon: React.El
   inspect_assets: { label: 'Inspected media', running: 'Inspecting media', icon: Film },
   view_media: { label: 'Looked at media', running: 'Looking at media', icon: Eye },
   analyze_media: { label: 'Analyzed media', running: 'Analyzing media', icon: Film },
+  enhance_audio: { label: 'Enhanced the speech', running: 'Cleaning up the audio', icon: Mic },
   transcribe: { label: 'Transcribed speech', running: 'Transcribing speech', icon: Captions },
   get_transcript: { label: 'Read the transcript', running: 'Reading the transcript', icon: Captions },
   search_transcript: { label: 'Searched the transcript', running: 'Searching the transcript', icon: Search },

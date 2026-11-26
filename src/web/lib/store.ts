@@ -66,6 +66,8 @@ interface StudioStore {
   composerFocusTick: number;
   /** Text to place in the chat composer (e.g. a brief typed before an AI model was configured). */
   composerPrefill: string | null;
+  /** Open recorder (voice / camera / screen), or null. */
+  recorder: 'voice' | 'camera' | 'screen' | null;
   /** Asset ids attached to the next chat message. */
   composerAttachments: string[];
   attachToChat: (assetIds: string[]) => void;
@@ -240,6 +242,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     composerFocusTick: 0,
     composerPrefill: null,
     composerAttachments: [],
+    recorder: null,
     attachToChat: (ids) => {
       set({ composerAttachments: [...new Set([...get().composerAttachments, ...ids])] });
       get().focusComposer();

@@ -4,6 +4,8 @@ import { clipEnd, projectDuration } from '../../shared/timeline';
 import { uid } from '../../shared/ids';
 import { useStudio } from './store';
 import { player } from './player';
+import { api } from './api';
+import { errorText } from './utils';
 
 /** Editing commands shared by keyboard shortcuts, toolbars and menus. */
 
@@ -227,4 +229,17 @@ export const cutRanges = async (ranges: [number, number][], label: string): Prom
     .map(([from, to]) => ({ op: 'rippleDelete' as const, from, to, trackIds }));
   if (ops.length === 0) return false;
   return Boolean(await edit(ops, label));
+};
+
+/** Clean up the speech of an asset (new enhanced copy; clips switch to it). */
+export const enhanceSpeech = async (assetId: string, strength: 'light' | 'medium' | 'strong' = 'medium') => {
+  const { projectId } = useStudio.getState();
+  if (!projectId) return;
+  const t = toast.loading('Cleaning up the audio… (noise, rumble, levels)');
+  try {
+    const r = await api.runTool(projectId, 'enhance_audio', { assetId, strength });
+    toast.success(`Speech enhanced${r.summary ? ` · ${r.summary}` : ''}`, { id: t });
+  } catch (err) {
+    toast.error(errorText(err), { id: t });
+  }
 };
