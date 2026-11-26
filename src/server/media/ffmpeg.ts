@@ -186,6 +186,19 @@ export const thumbnail = async (input: string, output: string, atSec = 0, width 
   await must('ffmpeg', ['-y', ...args, '-frames:v', '1', '-vf', `scale=${width}:-2`, '-q:v', '4', output]);
 };
 
+/**
+ * A horizontal sprite of evenly spaced frames for the timeline filmstrip.
+ * Long videos decode keyframes only, which is fast and plenty for a strip.
+ */
+export const filmstrip = async (input: string, output: string, duration: number, srcW: number, srcH: number, tileH = 64): Promise<{ count: number; interval: number; tileW: number; tileH: number }> => {
+  const count = Math.max(4, Math.min(100, Math.ceil(duration / 2)));
+  const tileW = Math.max(2, Math.round((tileH * (srcW || 16)) / (srcH || 9) / 2) * 2);
+  const rate = (count / Math.max(0.1, duration)).toFixed(6);
+  const fast = duration > 300 ? ['-skip_frame', 'nokey'] : [];
+  await must('ffmpeg', ['-y', ...fast, '-i', input, '-an', '-vf', `fps=${rate},scale=${tileW}:${tileH},tile=${count}x1`, '-frames:v', '1', '-q:v', '5', output], { timeoutMs: 10 * 60_000 });
+  return { count, interval: duration / count, tileW, tileH };
+};
+
 /** Grab frames at the given times as JPEG buffers (for vision models). */
 export const extractFrames = async (input: string, times: number[], width = 768): Promise<{ time: number; jpeg: Buffer }[]> => {
   const out: { time: number; jpeg: Buffer }[] = [];

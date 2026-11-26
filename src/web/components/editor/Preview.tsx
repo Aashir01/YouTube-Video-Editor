@@ -114,6 +114,8 @@ export const Preview: React.FC = () => {
   };
   const [zoomMode, setZoomMode] = useState<ZoomMode>('fit');
   const playbackRate = useStudio((s) => s.playbackRate);
+  const range = useStudio((s) => s.range);
+  const loopRange = useStudio((s) => s.loopRange);
 
   const { width, height, fps } = project.canvas;
   const duration = projectDuration(project);
@@ -148,7 +150,10 @@ export const Preview: React.FC = () => {
   useEffect(() => {
     const p = ref.current;
     if (!p) return;
-    const onFrame = (e: { detail: { frame: number } }) => setTime(e.detail.frame / fps);
+    const onFrame = (e: { detail: { frame: number } }) => {
+      const past = player.beyondEnd;
+      setTime(past !== null && e.detail.frame >= durationInFrames - 1 ? past : e.detail.frame / fps);
+    };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onWait = () => setBuffering(true);
@@ -169,11 +174,20 @@ export const Preview: React.FC = () => {
       p.removeEventListener('waiting', onWait);
       p.removeEventListener('resume', onResume);
     };
-  }, [fps, setTime, setPlaying, size.w > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fps, setTime, setPlaying, size.w > 0, durationInFrames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => player.attach(null, fps, 1), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const empty = duration === 0;
+
+  // loop the in/out range (I / O) when asked
+  const rangeFrames = loopRange && range ? [Math.max(0, Math.round(range[0] * fps)), Math.min(durationInFrames - 1, Math.round(range[1] * fps) - 1)] : null;
+  const inOut = rangeFrames && rangeFrames[1] > rangeFrames[0] ? rangeFrames : null;
+  useEffect(() => {
+    if (!inOut) return;
+    const t = useStudio.getState().time;
+    if (t * fps < inOut[0] || t * fps > inOut[1]) player.seek(inOut[0] / fps);
+  }, [inOut?.[0], inOut?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="stage-grid flex h-full flex-col">
@@ -196,7 +210,9 @@ export const Preview: React.FC = () => {
                 spaceKeyToPlayOrPause={false}
                 moveToBeginningWhenEnded={false}
                 playbackRate={playbackRate}
-                loop={loop}
+                inFrame={inOut ? inOut[0] : null}
+                outFrame={inOut ? inOut[1] : null}
+                loop={loop || Boolean(inOut)}
                 acknowledgeRemotionLicense
                 errorFallback={({ error }) => (
                   <div className="flex size-full items-center justify-center bg-black p-6 text-center text-sm text-danger">Preview error: {error.message}</div>

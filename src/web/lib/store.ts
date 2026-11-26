@@ -49,6 +49,12 @@ interface StudioStore {
   playing: boolean;
   /** Preview playback speed (negative = reverse, used by J/K/L shuttle). */
   playbackRate: number;
+  /** In/out range on the timeline (I / O keys). */
+  range: [number, number] | null;
+  /** Loop playback inside the range. */
+  loopRange: boolean;
+  /** Timeline track height multiplier. */
+  trackScale: number;
   selection: string[];
   zoom: number;
   /** Timeline zoom follows the video length until the user zooms by hand. */
@@ -221,6 +227,9 @@ export const useStudio = create<StudioStore>((set, get) => {
     time: 0,
     playing: false,
     playbackRate: 1,
+    range: null,
+    loopRange: false,
+    trackScale: prefs.get('trackScale', 1),
     selection: [],
     zoom: prefs.get('zoom', 0),
     autoFit: true,
@@ -239,7 +248,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     openProject: async (id) => {
       disconnect?.();
       transcriptSig = '';
-      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [] });
+      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
       try {
         const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
         if (get().projectId !== id) return;
