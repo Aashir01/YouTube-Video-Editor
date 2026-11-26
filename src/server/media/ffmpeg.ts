@@ -332,6 +332,21 @@ export const normalizeLoudness = async (input: string, output: string, target = 
   await must('ffmpeg', ['-y', '-i', input, '-c:v', 'copy', '-af', filter, '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', output], { signal, timeoutMs: 60 * 60_000 });
 };
 
+/** Final audio-only export: optional loudness normalization, MP3 320k (AAC/M4A if the build lacks LAME). Returns the file written. */
+export const exportAudio = async (input: string, outputBase: string, target: number | null): Promise<string> => {
+  let filter: string[] = [];
+  if (target !== null) {
+    const m = await measureLoudness(input).catch(() => null);
+    filter = ['-af', m && Number.isFinite(m.i) && m.i > -70 ? `loudnorm=I=${target}:TP=-1:LRA=11:measured_I=${m.i}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true` : `loudnorm=I=${target}:TP=-1:LRA=11`];
+  }
+  const mp3 = `${outputBase}.mp3`;
+  const r = await runFf('ffmpeg', ['-y', '-i', input, '-vn', ...filter, '-ar', '48000', '-c:a', 'libmp3lame', '-b:a', '320k', mp3], { timeoutMs: 60 * 60_000 });
+  if (r.code === 0) return mp3;
+  const m4a = `${outputBase}.m4a`;
+  await must('ffmpeg', ['-y', '-i', input, '-vn', ...filter, '-ar', '48000', '-c:a', 'aac', '-b:a', '256k', m4a], { timeoutMs: 60 * 60_000 });
+  return m4a;
+};
+
 export const extractAudioWav = async (input: string, output: string, sampleRate = 16000): Promise<void> => {
   await must('ffmpeg', ['-y', '-i', input, '-vn', '-ac', '1', '-ar', String(sampleRate), '-c:a', 'pcm_s16le', output], { timeoutMs: 30 * 60_000 });
 };

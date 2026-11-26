@@ -6,6 +6,7 @@ import { useStudio } from './store';
 import { player } from './player';
 import { api } from './api';
 import { errorText } from './utils';
+import { navigate } from './nav';
 
 /** Editing commands shared by keyboard shortcuts, toolbars and menus. */
 
@@ -239,6 +240,20 @@ export const enhanceSpeech = async (assetId: string, strength: 'light' | 'medium
   try {
     const r = await api.runTool(projectId, 'enhance_audio', { assetId, strength });
     toast.success(`Speech enhanced${r.summary ? ` · ${r.summary}` : ''}`, { id: t });
+  } catch (err) {
+    toast.error(errorText(err), { id: t });
+  }
+};
+
+/** Cut time ranges into a new vertical Short project (offers to open it). */
+export const makeShort = async (ranges: [number, number][], title?: string) => {
+  const { projectId } = useStudio.getState();
+  if (!projectId || ranges.length === 0) return;
+  const len = ranges.reduce((n, [a, b]) => n + Math.abs(b - a), 0);
+  const t = toast.loading(`Cutting a ${len.toFixed(0)}s Short…`);
+  try {
+    const r = await api.createShort(projectId, ranges, title);
+    toast.success(`Short ready: ${r.name} (${r.duration.toFixed(0)}s, 9:16, captioned)`, { id: t, duration: 8000, action: { label: 'Open', onClick: () => navigate(r.id) } });
   } catch (err) {
     toast.error(errorText(err), { id: t });
   }

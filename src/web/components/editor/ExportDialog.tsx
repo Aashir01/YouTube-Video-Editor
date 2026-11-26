@@ -51,9 +51,9 @@ const RenderRow: React.FC<{ r: RenderRecord }> = ({ r }) => {
         {r.status === 'done' && r.file && (
           <>
             <a className="btn btn-sm" href={renderUrl(projectId, r.file, true)} download>
-              <Download className="size-3.5" /> MP4
+              <Download className="size-3.5" /> {r.file.split('.').pop()!.toUpperCase()}
             </a>
-            <a className="btn btn-sm btn-ghost" href={renderUrl(projectId, r.file.replace(/\.mp4$/, '.srt'), true)} download title="Captions file">
+            <a className="btn btn-sm btn-ghost" href={renderUrl(projectId, r.file.replace(/\.(mp4|mp3|m4a)$/, '.srt'), true)} download title="Captions / transcript file">
               <FileText className="size-3.5" /> SRT
             </a>
           </>
@@ -83,15 +83,20 @@ const RenderRow: React.FC<{ r: RenderRecord }> = ({ r }) => {
 
 const RenderSection: React.FC = () => {
   const project = useStudio((s) => s.project!);
+  const range = useStudio((s) => s.range);
   const [preset, setPreset] = useState('standard');
+  const [output, setOutput] = useState<'video' | 'audio'>('video');
+  const [scope, setScope] = useState<'all' | 'range'>(range ? 'range' : 'all');
   const [starting, setStarting] = useState(false);
-  const renders = project.renders.filter((r) => r.kind === 'video');
+  const renders = project.renders.filter((r) => r.kind === 'video' || r.kind === 'audio');
   const latest = renders.find((r) => r.status === 'done' && r.file);
   const duration = projectDuration(project);
+  const useRange = scope === 'range' && range !== null;
+  const length = useRange ? range![1] - range![0] : duration;
   const start = async () => {
     setStarting(true);
     try {
-      await api.render(project.id, { preset });
+      await api.render(project.id, { preset, range: useRange ? range! : undefined, audioOnly: output === 'audio' });
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -100,18 +105,47 @@ const RenderSection: React.FC = () => {
   };
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-end gap-2">
-        <Field label="Quality" className="flex-1">
-          <SelectField value={preset} onChange={setPreset} options={PRESETS} />
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Output">
+          <Segmented
+            size="sm"
+            value={output}
+            onChange={setOutput}
+            options={[
+              { value: 'video', label: 'Video · MP4' },
+              { value: 'audio', label: 'Audio · MP3' },
+            ]}
+          />
         </Field>
-        <button className="btn btn-primary" disabled={starting || duration === 0} onClick={() => void start()}>
-          {starting ? <Spinner /> : <Clapperboard className="size-4" />} Render {duration > 0 ? formatClock(duration) : ''}
+        <Field label="Part">
+          <Segmented
+            size="sm"
+            value={useRange ? 'range' : 'all'}
+            onChange={(v) => setScope(v)}
+            options={[
+              { value: 'all', label: 'Whole video' },
+              { value: 'range', label: range ? `In–out ${formatClock(range[0])}–${formatClock(range[1])}` : 'In–out (set I/O)', title: range ? undefined : 'Set an in/out range on the timeline with I and O' },
+            ]}
+          />
+        </Field>
+      </div>
+      <div className="flex items-end gap-2">
+        {output === 'video' ? (
+          <Field label="Quality" className="flex-1">
+            <SelectField value={preset} onChange={setPreset} options={PRESETS} />
+          </Field>
+        ) : (
+          <p className="flex-1 pb-1.5 text-[11px] leading-snug text-dim">The full mix (voice, music, effects) as a 320 kbps MP3 — for podcasts and audio platforms.</p>
+        )}
+        <button className="btn btn-primary" disabled={starting || duration === 0 || (scope === 'range' && !range)} onClick={() => void start()}>
+          {starting ? <Spinner /> : <Clapperboard className="size-4" />} Render {length > 0 ? formatClock(length) : ''}
         </button>
       </div>
       <p className="-mt-1 text-[11px] leading-snug text-dim">
-        H.264 MP4 with AAC audio{project.audio.normalize ? `, loudness-normalized to ${project.audio.loudnessTarget} LUFS` : ''}, plus an SRT caption file. Rendering runs locally with all your CPU cores.
+        {output === 'video' ? 'H.264 MP4 with AAC audio' : 'MP3 audio'}
+        {project.audio.normalize ? `, loudness-normalized to ${project.audio.loudnessTarget} LUFS` : ''}, plus an SRT caption file. Rendering runs locally with all your CPU cores.
       </p>
-      {latest?.file && <video src={renderUrl(project.id, latest.file)} controls className="w-full rounded-lg border border-line bg-black" style={{ maxHeight: 260 }} />}
+      {latest?.file && (latest.kind === 'audio' ? <audio src={renderUrl(project.id, latest.file)} controls className="w-full" /> : <video src={renderUrl(project.id, latest.file)} controls className="w-full rounded-lg border border-line bg-black" style={{ maxHeight: 260 }} />)}
       <div className="flex flex-col gap-2">
         {renders.map((r) => (
           <RenderRow key={r.id} r={r} />
