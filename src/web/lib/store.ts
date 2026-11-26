@@ -453,9 +453,10 @@ export const clipLabel = (clip: Clip, p?: Project | null): string => {
 
 /** Editor state the agent should know about (sent alongside chat messages, not shown in the chat). */
 export const editorContext = (): string => {
-  const { project, time, selection } = useStudio.getState();
+  const { project, time, selection, range } = useStudio.getState();
   if (!project) return '';
   const lines = [`Playhead: ${formatTime(time)} (of ${formatTime(projectDuration(project))})`];
+  if (range) lines.push(`In/out range: ${formatTime(range[0])}–${formatTime(range[1])} (${(range[1] - range[0]).toFixed(2)}s) — "this part" means this range`);
   const refs = selection.map((id) => getClipRef(project, id)).filter((r): r is NonNullable<typeof r> => Boolean(r));
   if (refs.length) {
     lines.push('Selected clips:');

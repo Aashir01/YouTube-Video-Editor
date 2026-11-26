@@ -251,6 +251,7 @@ const Composer: React.FC = () => {
   const prefill = useStudio((s) => s.composerPrefill);
   const focusTick = useStudio((s) => s.composerFocusTick);
   const selection = useStudio((s) => s.selection.length);
+  const hasRange = useStudio((s) => Boolean(s.range));
   const [text, setText] = useState(() => prefs.get<string>(`draft:${projectId}`, ''));
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -418,7 +419,7 @@ const Composer: React.FC = () => {
           </button>
           <input ref={fileInput} type="file" hidden multiple onChange={(e) => (void upload([...(e.target.files ?? [])]), (e.target.value = ''))} />
           <span className="min-w-0 flex-1 truncate text-[10px] text-dim" title="Sent to the Director with your message">
-            {project.tracks.some((t) => t.clips.length) ? `Sees: playhead${selection ? ` · ${selection} selected clip${selection > 1 ? 's' : ''}` : ''}` : ''}
+            {project.tracks.some((t) => t.clips.length) ? `Sees: playhead${hasRange ? ' · in/out range' : ''}${selection ? ` · ${selection} selected clip${selection > 1 ? 's' : ''}` : ''}` : ''}
           </span>
           {busy && (
             <button className="btn btn-sm" onClick={() => void api.stop(projectId)} title="Stop the Director">

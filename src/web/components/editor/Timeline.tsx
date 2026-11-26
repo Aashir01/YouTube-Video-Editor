@@ -94,6 +94,16 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
     const { major, minor } = niceStep(zoom);
     const t0 = scrollLeft / zoom;
     const t1 = (scrollLeft + width) / zoom;
+    // marker labels are measured first: tick numbers they would cover are skipped
+    const MARKER_FONT = '600 9px "Inter Variable", sans-serif';
+    g.font = MARKER_FONT;
+    const chips = project.markers
+      .map((m) => {
+        const label = m.label.length > 24 ? `${m.label.slice(0, 23)}…` : m.label;
+        return { m, x: m.time * zoom - scrollLeft, label, w: g.measureText(label).width };
+      })
+      .filter((c) => c.x > -c.w - 24 && c.x < width + 10);
+    const covered = (x0: number, x1: number) => chips.some((c) => x1 > c.x - 6 && x0 < c.x + c.w + 16);
     g.strokeStyle = '#353c55';
     g.fillStyle = '#a3abc1';
     g.font = '10px "JetBrains Mono Variable", monospace';
@@ -107,7 +117,10 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
       g.moveTo(x, isMajor ? 10 : 18);
       g.lineTo(x, RULER_H);
       g.stroke();
-      if (isMajor && t >= 0) g.fillText(tickLabel(Math.max(0, t), major), x + 3, 3);
+      if (isMajor && t >= 0) {
+        const label = tickLabel(Math.max(0, t), major);
+        if (!covered(x + 3, x + 3 + g.measureText(label).width)) g.fillText(label, x + 3, 3);
+      }
     }
     // chapters & markers
     for (const ch of project.youtube.chapters) {
@@ -122,17 +135,20 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
       g.fillStyle = '#fff';
       g.fillText(ch.title.slice(0, 26), x + 6, 14);
     }
-    for (const m of project.markers) {
-      const x = m.time * zoom - scrollLeft;
-      if (x < -120 || x > width + 10) continue;
+    g.font = MARKER_FONT;
+    for (const { m, x, label, w } of chips) {
       g.fillStyle = m.color;
       g.beginPath();
       g.moveTo(x - 5, 0);
       g.lineTo(x + 5, 0);
       g.lineTo(x, 8);
       g.fill();
-      g.font = '600 9px "Inter Variable", sans-serif';
-      g.fillText(m.label.slice(0, 22), x + 7, 1);
+      g.fillStyle = 'rgba(15,17,26,0.94)';
+      g.beginPath();
+      g.roundRect(x + 6, 0, w + 8, 12, 3);
+      g.fill();
+      g.fillStyle = m.color;
+      g.fillText(label, x + 10, 1.5);
     }
     if (range) {
       const x0 = range[0] * zoom - scrollLeft;
