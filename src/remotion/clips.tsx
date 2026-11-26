@@ -40,6 +40,8 @@ export const VisualFrame: React.FC<{ clip: VisualClip; children: React.ReactNode
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
       <div
+        data-clip-box={clip.type === 'text' ? undefined : clip.id}
+        data-clip-kind={clip.type === 'text' ? undefined : box ? 'box' : 'frame'}
         style={{
           ...boxStyle,
           overflow: 'hidden',
@@ -78,6 +80,7 @@ export const VideoView: React.FC<{ clip: VideoClip; trackMuted: boolean }> = ({ 
   if (!src) return <MissingMedia label={clip.assetId} />;
   const z = zoomAt(clip, frame / fps);
   const total = clipFrames(clip, fps).durationInFrames;
+  const frameStyle = mediaFrameStyle(clip, z);
   return (
     <OffthreadVideo
       src={src}
@@ -86,15 +89,22 @@ export const VideoView: React.FC<{ clip: VideoClip; trackMuted: boolean }> = ({ 
       muted={trackMuted || clip.muted || clip.volume === 0}
       volume={(f) => clip.volume * fadeGain(f, total, clip.audioFadeIn, clip.audioFadeOut, fps)}
       pauseWhenBuffering
-      style={{
-        width: '100%',
-        height: '100%',
-        objectFit: clip.fit,
-        transform: z.scale !== 1 ? `scale(${z.scale})` : undefined,
-        transformOrigin: `${z.ox * 100}% ${z.oy * 100}%`,
-      }}
+      style={{ width: '100%', height: '100%', ...frameStyle }}
     />
   );
+};
+
+/** object-fit/position and zoom for a media clip: animated zooms win the transform origin, otherwise the focus point. */
+const mediaFrameStyle = (clip: VideoClip | ImageClip, z: { scale: number; ox: number; oy: number }): React.CSSProperties => {
+  const fx = clip.focus?.x ?? 0.5;
+  const fy = clip.focus?.y ?? 0.5;
+  const s = z.scale * (clip.scale ?? 1);
+  return {
+    objectFit: clip.fit,
+    objectPosition: clip.focus ? `${fx * 100}% ${fy * 100}%` : undefined,
+    transform: s !== 1 ? `scale(${s})` : undefined,
+    transformOrigin: z.scale !== 1 ? `${z.ox * 100}% ${z.oy * 100}%` : `${fx * 100}% ${fy * 100}%`,
+  };
 };
 
 export const ImageView: React.FC<{ clip: ImageClip }> = ({ clip }) => {
@@ -109,18 +119,7 @@ export const ImageView: React.FC<{ clip: ImageClip }> = ({ clip }) => {
       {clip.blurredBackdrop ? (
         <Img src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(40px) brightness(0.6)', transform: 'scale(1.2)' }} />
       ) : null}
-      <Img
-        src={src}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: clip.fit,
-          transform: z.scale !== 1 ? `scale(${z.scale})` : undefined,
-          transformOrigin: `${z.ox * 100}% ${z.oy * 100}%`,
-        }}
-      />
+      <Img src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', ...mediaFrameStyle(clip, z) }} />
     </AbsoluteFill>
   );
 };
@@ -269,7 +268,9 @@ export const TextView: React.FC<{ clip: TextClip }> = ({ clip }) => {
         }}
       >
         <div style={{ ...exitStyle }}>
-          <div style={{ ...enterStyle, ...box, ...textStyle }}>{content}</div>
+          <div data-clip-box={clip.id} data-clip-kind="text" style={{ ...enterStyle, ...box, ...textStyle }}>
+            {content}
+          </div>
         </div>
       </div>
     </AbsoluteFill>
@@ -430,7 +431,7 @@ export const CaptionsView: React.FC<{ clip: CaptionsClip }> = ({ clip }) => {
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
       <div style={container}>
-        <div style={inner}>
+        <div data-clip-box={clip.id} data-clip-kind="captions" style={inner}>
           {page.words.map(renderWord)}
           {st.preset === 'typewriter' && Math.floor(frame / 8) % 2 === 0 ? <span style={{ color: highlight }}>▍</span> : null}
         </div>

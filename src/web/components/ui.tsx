@@ -232,7 +232,8 @@ export const TextArea: React.FC<{
   rows?: number;
   mono?: boolean;
   commit?: 'change' | 'blur';
-}> = ({ value, onChange, placeholder, className, rows = 3, mono, commit = 'change' }) => {
+  id?: string;
+}> = ({ value, onChange, placeholder, className, rows = 3, mono, commit = 'change', id }) => {
   const [draft, setDraft] = useState(value);
   const focused = useRef(false);
   useEffect(() => {
@@ -240,6 +241,7 @@ export const TextArea: React.FC<{
   }, [value]);
   return (
     <textarea
+      id={id}
       value={draft}
       rows={rows}
       placeholder={placeholder}

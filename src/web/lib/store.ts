@@ -47,6 +47,8 @@ interface StudioStore {
   // editor
   time: number;
   playing: boolean;
+  /** Preview playback speed (negative = reverse, used by J/K/L shuttle). */
+  playbackRate: number;
   selection: string[];
   zoom: number;
   /** Timeline zoom follows the video length until the user zooms by hand. */
@@ -218,6 +220,7 @@ export const useStudio = create<StudioStore>((set, get) => {
 
     time: 0,
     playing: false,
+    playbackRate: 1,
     selection: [],
     zoom: prefs.get('zoom', 0),
     autoFit: true,
