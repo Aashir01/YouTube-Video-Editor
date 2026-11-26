@@ -1,18 +1,44 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenu } from 'radix-ui';
 import { toast } from 'sonner';
-import { Copy, Eye, EyeOff, Lock, LockOpen, Magnet, MessageSquareText, Plus, Scissors, Trash2, Volume2, VolumeX, ZoomIn, ZoomOut, Maximize2, ArrowLeftToLine } from 'lucide-react';
+import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  Bookmark,
+  ClipboardPaste,
+  Copy,
+  Eraser,
+  Eye,
+  EyeOff,
+  Lock,
+  LockOpen,
+  Magnet,
+  Maximize2,
+  MessageSquareText,
+  Plus,
+  Repeat,
+  Rows3,
+  Scissors,
+  Trash2,
+  Volume2,
+  VolumeX,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { TRACK_ACCEPTS, type Clip, type Project, type Track } from '../../../shared/schema';
 import { clipEnd, conflictsOnTrack, projectDuration } from '../../../shared/timeline';
 import { uid } from '../../../shared/ids';
 import type { EditOp } from '../../../shared/ops';
 import { getClipRef, useStudio } from '../../lib/store';
 import { player } from '../../lib/player';
-import { deleteSelection, splitAtPlayhead } from '../../lib/actions';
+import { prefs } from '../../lib/prefs';
+import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead } from '../../lib/actions';
+import { api } from '../../lib/api';
 import { activeDrag, clearDragPayload, DND_TYPE, dropFiles, dropPayload, readDragPayload } from '../../lib/dnd';
-import { cn, clamp, formatClock, modKey } from '../../lib/utils';
+import { cn, clamp, formatClock, formatTimecode, modKey } from '../../lib/utils';
 import { TrackIcon } from '../icons';
-import { IconBtn, Menu } from '../ui';
+import { IconBtn, Menu, Tip } from '../ui';
 import { ClipBlock, type DragMode } from './TimelineClip';
 
 const HEADER_W = 172;
@@ -54,6 +80,7 @@ const tickLabel = (t: number, major: number) => {
 
 const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project: Project; onScrub: (t: number) => void }> = ({ zoom, scrollLeft, width, project, onScrub }) => {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const range = useStudio((s) => s.range);
   useEffect(() => {
     const c = canvas.current;
     if (!c || width <= 0) return;
@@ -96,22 +123,56 @@ const Ruler: React.FC<{ zoom: number; scrollLeft: number; width: number; project
     }
     for (const m of project.markers) {
       const x = m.time * zoom - scrollLeft;
+      if (x < -120 || x > width + 10) continue;
       g.fillStyle = m.color;
       g.beginPath();
       g.moveTo(x - 5, 0);
       g.lineTo(x + 5, 0);
       g.lineTo(x, 8);
       g.fill();
+      g.font = '600 9px "Inter Variable", sans-serif';
+      g.fillText(m.label.slice(0, 22), x + 7, 1);
     }
-  }, [zoom, scrollLeft, width, project.youtube.chapters, project.markers]);
+    if (range) {
+      const x0 = range[0] * zoom - scrollLeft;
+      const x1 = range[1] * zoom - scrollLeft;
+      g.fillStyle = 'rgba(139,123,255,0.22)';
+      g.fillRect(x0, 0, x1 - x0, RULER_H);
+      g.fillStyle = '#8b7bff';
+      g.fillRect(x0, 0, 2, RULER_H);
+      g.fillRect(x1 - 2, 0, 2, RULER_H);
+      g.fillRect(x0, RULER_H - 3, x1 - x0, 3);
+    }
+  }, [zoom, scrollLeft, width, project.youtube.chapters, project.markers, range]);
+
+  const markerAt = (clientX: number, rect: DOMRect) => project.markers.find((m) => Math.abs(m.time * zoom - scrollLeft - (clientX - rect.left)) <= 6);
 
   return (
     <canvas
       ref={canvas}
       style={{ width, height: RULER_H }}
       className="block cursor-text"
+      title="Click to move the playhead · markers: click to jump, double-click to rename, right-click to remove"
+      onContextMenu={(e) => {
+        const m = markerAt(e.clientX, e.currentTarget.getBoundingClientRect());
+        if (!m) return;
+        e.preventDefault();
+        void useStudio.getState().edit([{ op: 'removeMarker', markerId: m.id }], 'Remove marker');
+      }}
+      onDoubleClick={(e) => {
+        const m = markerAt(e.clientX, e.currentTarget.getBoundingClientRect());
+        if (!m) return;
+        const label = prompt('Marker label', m.label);
+        if (label?.trim()) void useStudio.getState().edit([{ op: 'updateMarker', markerId: m.id, patch: { label: label.trim() } }], 'Rename marker');
+      }}
       onPointerDown={(e) => {
+        if (e.button !== 0) return;
         const rect = e.currentTarget.getBoundingClientRect();
+        const m = markerAt(e.clientX, rect);
+        if (m && e.clientY - rect.top < 12) {
+          onScrub(m.time);
+          return;
+        }
         const at = (x: number) => Math.max(0, (x - rect.left + scrollLeft) / zoom);
         onScrub(at(e.clientX));
         const move = (ev: PointerEvent) => onScrub(at(ev.clientX));
@@ -173,6 +234,7 @@ const TimecodeCorner: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const TrackHeader: React.FC<{ track: Track; height: number }> = ({ track, height }) => {
+  const compact = height < 40;
   const edit = useStudio((s) => s.edit);
   const [renaming, setRenaming] = useState(false);
   const toggle = (patch: Partial<Pick<Track, 'muted' | 'hidden' | 'locked'>>, label: string) => void edit([{ op: 'updateTrack', trackId: track.id, patch }], label);
@@ -180,7 +242,7 @@ const TrackHeader: React.FC<{ track: Track; height: number }> = ({ track, height
   const audible = track.kind === 'audio' || track.kind === 'video' || track.kind === 'overlay';
   return (
     <div className="group flex items-center gap-2 border-b border-r border-line bg-solid/80 px-2 backdrop-blur-xl" style={{ height, width: HEADER_W }}>
-      <span className={cn('tile size-6 rounded-md', trackHue(track))}>
+      <span className={cn('tile rounded-md', compact ? 'size-5' : 'size-6', trackHue(track))}>
         <TrackIcon track={track} className="size-3.5" />
       </span>
       {renaming ? (
@@ -232,6 +294,12 @@ export const Timeline: React.FC = () => {
   const setSnapping = useStudio((s) => s.setSnapping);
   const edit = useStudio((s) => s.edit);
   const select = useStudio((s) => s.select);
+  const trackScale = useStudio((s) => s.trackScale);
+  const range = useStudio((s) => s.range);
+  const loopRange = useStudio((s) => s.loopRange);
+  const [readout, setReadout] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const th = useCallback((t: Track) => Math.round(TRACK_H[t.kind] * trackScale), [trackScale]);
 
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -304,10 +372,19 @@ export const Timeline: React.FC = () => {
     let y = 0;
     return tracks.map((t) => {
       const top = y;
-      y += TRACK_H[t.kind];
+      y += th(t);
       return top;
     });
-  }, [tracks]);
+  }, [tracks, th]);
+
+  // older video assets get their filmstrip generated on demand
+  useEffect(() => {
+    for (const a of project.assets) {
+      if (a.kind !== 'video' || a.status !== 'ready' || a.filmstrip || stripRequested.has(`${project.id}/${a.id}`)) continue;
+      stripRequested.add(`${project.id}/${a.id}`);
+      void api.filmstrip(project.id, a.id).catch(() => undefined);
+    }
+  }, [project.assets, project.id]);
 
   const trackAtY = (clientY: number): Track | undefined => {
     const el = scroller.current;
@@ -353,6 +430,40 @@ export const Timeline: React.FC = () => {
     if (st.rightTab !== 'inspector' && e.detail >= 2) st.setRightTab('inspector');
     if (ref.track.locked) return;
 
+    if (mode === 'fade-in' || mode === 'fade-out' || mode === 'volume') {
+      const el = (e.currentTarget as HTMLElement).closest('[data-clip-id]') as HTMLElement | null;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const audio = clip.type === 'audio';
+      const key = mode === 'volume' ? 'volume' : mode === 'fade-in' ? (audio ? 'fadeIn' : 'audioFadeIn') : audio ? 'fadeOut' : 'audioFadeOut';
+      const label = mode === 'volume' ? 'Volume' : mode === 'fade-in' ? 'Fade in' : 'Fade out';
+      const onMove = (ev: PointerEvent) => {
+        let value: number;
+        let text: string;
+        if (mode === 'volume') {
+          const h = rect.height - 2;
+          const y = clamp(ev.clientY - rect.top, 6, h - 6);
+          value = Math.round(clamp((1 - (y - 6) / (h - 12)) * 2, 0, 2) * 100) / 100;
+          text = `${Math.round(value * 100)}% · ${value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dB` : '−∞ dB'}`;
+        } else {
+          const px = mode === 'fade-in' ? ev.clientX - rect.left : rect.right - ev.clientX;
+          value = Math.round(clamp(px / zoom, 0, clip.duration / 2) * 100) / 100;
+          text = `${label} ${value.toFixed(2)}s`;
+        }
+        useStudio.getState().editSoon(`env:${clip.id}:${key}`, { op: 'updateClip', clipId: clip.id, patch: { [key]: value } }, label);
+        setReadout({ x: ev.clientX, y: ev.clientY, text });
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        setReadout(null);
+        useStudio.getState().flushEdits();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      return;
+    }
+
     const p = st.project!;
     const group = mode === 'move' ? sel.map((id) => getClipRef(p, id)).filter((r): r is NonNullable<typeof r> => Boolean(r) && !r!.track.locked) : [ref];
     const ids = group.map((g) => g.clip.id);
@@ -397,6 +508,16 @@ export const Timeline: React.FC = () => {
       }
       dragRef.current = next;
       setDrag(next);
+      const fps = p.canvas.fps;
+      if (mode === 'move') {
+        const d = next.delta;
+        setReadout({ x: ev.clientX, y: ev.clientY, text: `${formatTimecode(clip.start + d, fps)}  ${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}s` });
+      } else {
+        const len = next.end - next.start;
+        const edge = mode === 'trim-start' ? next.start : next.end;
+        const delta = mode === 'trim-start' ? next.start - clip.start : next.end - clipEnd(clip);
+        setReadout({ x: ev.clientX, y: ev.clientY, text: `${mode === 'trim-start' ? 'In' : 'Out'} ${formatTimecode(edge, fps)} · ${len.toFixed(2)}s (${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)})` });
+      }
     };
 
     const up = () => {
@@ -405,6 +526,7 @@ export const Timeline: React.FC = () => {
       const d = dragRef.current;
       dragRef.current = null;
       setDrag(null);
+      setReadout(null);
       if (!moved || !d) return;
       const proj = useStudio.getState().project!;
       let ops: EditOp[] = [];
@@ -431,12 +553,43 @@ export const Timeline: React.FC = () => {
     window.addEventListener('pointerup', up);
   };
 
+  /** Click empty space = move the playhead; drag = rubber-band select (Shift adds). */
   const onLanePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const el = scroller.current!;
-    const x = e.clientX - el.getBoundingClientRect().left - HEADER_W + el.scrollLeft;
-    select([]);
-    player.seek(Math.max(0, x / zoom));
+    const box = () => el.getBoundingClientRect();
+    const toContent = (cx: number, cy: number) => ({ x: cx - box().left - HEADER_W + el.scrollLeft, y: cy - box().top + el.scrollTop });
+    const a = toContent(e.clientX, e.clientY);
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    const base = additive ? useStudio.getState().selection : [];
+    let dragging = false;
+    const onMove = (ev: PointerEvent) => {
+      const b = toContent(ev.clientX, ev.clientY);
+      if (!dragging && Math.hypot(b.x - a.x, b.y - a.y) < 5) return;
+      dragging = true;
+      const r = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+      setMarquee(r);
+      const t0 = r.x0 / zoom;
+      const t1 = r.x1 / zoom;
+      const hits: string[] = [];
+      tracks.forEach((t, i) => {
+        const top = offsets[i]!;
+        if (t.locked || top + th(t) < r.y0 || top > r.y1) return;
+        for (const c of t.clips) if (c.start < t1 && clipEnd(c) > t0) hits.push(c.id);
+      });
+      useStudio.setState({ selection: [...new Set([...base, ...hits])] });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setMarquee(null);
+      if (!dragging) {
+        if (!additive) select([]);
+        player.seek(Math.max(0, a.x / zoom));
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   const dropTime = (e: React.DragEvent): number => {
@@ -498,13 +651,19 @@ export const Timeline: React.FC = () => {
         { label: 'Ripple delete', shortcut: '⇧⌫', icon: <Trash2 />, danger: true, onSelect: () => void edit([{ op: 'removeClips', clipIds: [menuRef.clip.id], ripple: true }], 'Ripple delete') },
       ]
     : menuTrack
-      ? [{ label: 'Close gaps on this track', icon: <ArrowLeftToLine />, onSelect: () => void edit([{ op: 'closeGaps', trackId: menuTrack }], 'Close gaps') }]
+      ? [
+          { label: 'Paste at playhead', shortcut: `${modKey}V`, icon: <ClipboardPaste />, onSelect: pasteAtPlayhead },
+          { label: 'Select clips after playhead', icon: <ArrowRightToLine />, onSelect: selectForward },
+          { label: 'Add marker at playhead', shortcut: 'M', icon: <Bookmark />, onSelect: addMarkerAtPlayhead },
+          'separator' as const,
+          { label: 'Close gaps on this track', icon: <ArrowLeftToLine />, onSelect: () => void edit([{ op: 'closeGaps', trackId: menuTrack }], 'Close gaps') },
+        ]
       : [];
 
   const sliderVal = Math.log(zoom / MIN_ZOOM) / Math.log(MAX_ZOOM / MIN_ZOOM);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full select-none flex-col">
       {/* toolbar */}
       <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line bg-white/[0.02] px-2">
         <IconBtn label="Split at playhead" shortcut="S" onClick={splitAtPlayhead}>
@@ -531,7 +690,47 @@ export const Timeline: React.FC = () => {
             { label: 'Captions track', onSelect: () => void edit([{ op: 'addTrack', name: 'Captions 2', kind: 'captions' }], 'Add track') },
           ]}
         />
+        <Menu
+          align="start"
+          trigger={
+            <button className="btn btn-ghost btn-icon text-muted hover:text-text" aria-label="Track height" title="Track height">
+              <Rows3 className="size-4" />
+            </button>
+          }
+          items={[
+            { label: `${trackScale === 0.75 ? '✓ ' : ''}Compact tracks`, onSelect: () => setTrackScale(0.75) },
+            { label: `${trackScale === 1 ? '✓ ' : ''}Normal tracks`, onSelect: () => setTrackScale(1) },
+            { label: `${trackScale === 1.5 ? '✓ ' : ''}Tall tracks`, onSelect: () => setTrackScale(1.5) },
+          ]}
+        />
         {selection.length > 0 && <span className="ml-2 text-xs text-dim">{selection.length} selected</span>}
+        {range && (
+          <div className="ml-2 flex items-center gap-0.5 rounded-lg border border-accent-2/40 bg-accent-2/10 py-0.5 pl-2 pr-0.5">
+            <span className="font-mono text-[11px] text-accent-2-ink" title="In/out range (I / O, Alt+X to clear)">
+              {formatClock(range[0])} – {formatClock(range[1])} · {(range[1] - range[0]).toFixed(2)}s
+            </span>
+            <Tip label="Loop the range">
+              <button className={cn('rounded p-1 hover:bg-panel-3', loopRange ? 'text-accent-2-ink' : 'text-dim')} onClick={() => useStudio.setState({ loopRange: !loopRange })} aria-label="Loop range">
+                <Repeat className="size-3.5" />
+              </button>
+            </Tip>
+            <Tip label="Delete range and close the gap">
+              <button className="rounded p-1 text-dim hover:bg-panel-3 hover:text-danger" onClick={rippleDeleteRange} aria-label="Delete range">
+                <Trash2 className="size-3.5" />
+              </button>
+            </Tip>
+            <Tip label="Lift: clear the range, keep the gap">
+              <button className="rounded p-1 text-dim hover:bg-panel-3 hover:text-text" onClick={liftRangeMarks} aria-label="Lift range">
+                <Eraser className="size-3.5" />
+              </button>
+            </Tip>
+            <Tip label="Clear range" shortcut="Alt X">
+              <button className="rounded p-1 text-dim hover:bg-panel-3 hover:text-text" onClick={clearRangeMarks} aria-label="Clear range">
+                <X className="size-3.5" />
+              </button>
+            </Tip>
+          </div>
+        )}
         <div className="flex-1" />
         <IconBtn label="Zoom out" shortcut="-" onClick={() => zoomAround(zoom / 1.4)}>
           <ZoomOut className="size-4" />
@@ -580,9 +779,9 @@ export const Timeline: React.FC = () => {
           >
             <div className="relative" style={{ width: HEADER_W + contentW, minHeight: '100%' }}>
               {tracks.map((track, i) => (
-                <div key={track.id} className="flex" style={{ height: TRACK_H[track.kind] }}>
+                <div key={track.id} className="flex" style={{ height: th(track) }}>
                   <div className="sticky left-0 z-[6]">
-                    <TrackHeader track={track} height={TRACK_H[track.kind]} />
+                    <TrackHeader track={track} height={th(track)} />
                   </div>
                   <div
                     data-track-name={track.name}
@@ -615,7 +814,7 @@ export const Timeline: React.FC = () => {
                           project={project}
                           left={start * zoom}
                           width={(end - start) * zoom}
-                          height={TRACK_H[track.kind]}
+                          height={th(track)}
                           selected={selection.includes(clip.id)}
                           dragging={dragging}
                           locked={track.locked}
@@ -639,7 +838,7 @@ export const Timeline: React.FC = () => {
                             project={project}
                             left={(r.clip.start + drag.delta) * zoom}
                             width={r.clip.duration * zoom}
-                            height={TRACK_H[track.kind]}
+                            height={th(track)}
                             selected
                             dragging
                             locked={false}
@@ -653,6 +852,11 @@ export const Timeline: React.FC = () => {
                   </div>
                 </div>
               ))}
+              {range && <div className="pointer-events-none absolute bottom-0 top-0 z-[3] border-x border-accent-2/60 bg-accent-2/[0.07]" style={{ left: HEADER_W + range[0] * zoom, width: (range[1] - range[0]) * zoom }} />}
+              {project.markers.map((m) => (
+                <div key={m.id} className="pointer-events-none absolute bottom-0 top-0 z-[3] w-px opacity-50" style={{ left: HEADER_W + m.time * zoom, background: m.color }} />
+              ))}
+              {marquee && <div className="pointer-events-none absolute z-[7] rounded-sm border border-accent bg-accent/10" style={{ left: HEADER_W + marquee.x0, top: marquee.y0, width: marquee.x1 - marquee.x0, height: marquee.y1 - marquee.y0 }} />}
               {drag?.snapAt != null && <div className="pointer-events-none absolute bottom-0 top-0 z-[4] w-px bg-warn" style={{ left: HEADER_W + drag.snapAt * zoom }} />}
               <Playhead zoom={zoom} scroller={scroller} />
             </div>
@@ -684,6 +888,18 @@ export const Timeline: React.FC = () => {
           )}
         </ContextMenu.Portal>
       </ContextMenu.Root>
+      {readout && (
+        <div className="glass-pop pointer-events-none fixed z-[95] rounded-md px-1.5 py-0.5 font-mono text-[10px] text-text" style={{ left: readout.x + 14, top: readout.y - 28 }}>
+          {readout.text}
+        </div>
+      )}
     </div>
   );
+};
+
+const stripRequested = new Set<string>();
+
+const setTrackScale = (v: number) => {
+  prefs.set('trackScale', v);
+  useStudio.setState({ trackScale: v });
 };

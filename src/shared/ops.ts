@@ -4,6 +4,7 @@ import {
   BriefSchema,
   CanvasSchema,
   ClipSchema,
+  MarkerSchema,
   ScriptSchema,
   YouTubeSchema,
   type Clip,
@@ -13,6 +14,7 @@ import {
 } from './schema';
 import {
   addTrack,
+  clearRange,
   closeGaps,
   moveClip,
   placeClip,
@@ -40,6 +42,7 @@ export type EditOp =
   | { op: 'trimClip'; clipId: string; start?: number; end?: number }
   | { op: 'splitClip'; clipId: string; at: number }
   | { op: 'rippleDelete'; from: number; to: number; trackIds?: string[] }
+  | { op: 'liftRange'; from: number; to: number; trackIds?: string[] }
   | { op: 'shiftClips'; from: number; delta: number; trackIds?: string[] }
   | { op: 'closeGaps'; trackId: string }
   | { op: 'addTrack'; name: string; kind: TrackKind; index?: number }
@@ -54,6 +57,9 @@ export type EditOp =
   | { op: 'setAudioMix'; patch: Record<string, unknown> }
   | { op: 'renameProject'; name: string }
   | { op: 'updateAsset'; assetId: string; patch: { name?: string; description?: string; tags?: string[] } }
+  | { op: 'addMarker'; time: number; label?: string; color?: string; id?: string }
+  | { op: 'updateMarker'; markerId: string; patch: { time?: number; label?: string; color?: string } }
+  | { op: 'removeMarker'; markerId: string }
   | { op: 'removeAsset'; assetId: string };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -131,6 +137,11 @@ export const applyOp = (p: Project, op: EditOp): unknown => {
     case 'rippleDelete':
       rippleDelete(p, op.from, op.to, op.trackIds);
       return null;
+    case 'liftRange': {
+      if (op.to <= op.from) throw new Error('Range end must be after start');
+      for (const t of p.tracks) if (!t.locked && (!op.trackIds || op.trackIds.includes(t.id))) clearRange(p, t, op.from, op.to);
+      return null;
+    }
     case 'shiftClips':
       shiftClips(p, op.from, op.delta, op.trackIds);
       return null;
@@ -186,6 +197,22 @@ export const applyOp = (p: Project, op: EditOp): unknown => {
       if (op.patch.tags !== undefined) a.tags = op.patch.tags;
       return a.id;
     }
+    case 'addMarker': {
+      const m = MarkerSchema.parse({ id: op.id || `mk_${Math.random().toString(36).slice(2, 9)}`, time: Math.max(0, Math.round(op.time * 1000) / 1000), label: op.label ?? `Marker ${p.markers.length + 1}`, color: op.color });
+      p.markers.push(m);
+      p.markers.sort((a, b) => a.time - b.time);
+      return m.id;
+    }
+    case 'updateMarker': {
+      const m = p.markers.find((x) => x.id === op.markerId);
+      if (!m) throw new Error(`Marker ${op.markerId} not found`);
+      Object.assign(m, MarkerSchema.parse({ ...m, ...Object.fromEntries(Object.entries(op.patch).filter(([, v]) => v !== undefined)) }));
+      p.markers.sort((a, b) => a.time - b.time);
+      return m.id;
+    }
+    case 'removeMarker':
+      p.markers = p.markers.filter((x) => x.id !== op.markerId);
+      return null;
     case 'removeAsset': {
       const a = p.assets.find((x) => x.id === op.assetId);
       if (!a) throw new Error(`Asset ${op.assetId} not found`);

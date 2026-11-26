@@ -8,7 +8,7 @@ import { bus } from '../events';
 import { analysisQueue, transcriptionQueue } from '../jobs';
 import { store } from '../storage/projects';
 import { DOCUMENT_EXTENSIONS, extractDocumentText, parseSubtitles } from '../services/documents';
-import { probe, thumbnail, waveformPeaks } from './ffmpeg';
+import { filmstrip, probe, thumbnail, waveformPeaks } from './ffmpeg';
 
 const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.mts', '.m2ts', '.3gp', '.wmv', '.flv', '.mpg', '.mpeg'];
 const AUDIO_EXT = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac', '.aiff', '.aif', '.wma', '.weba'];
@@ -143,6 +143,13 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
       const at = info.duration ? Math.min(info.duration * 0.15, 3) : 0;
       await thumbnail(file, store.mediaPath(projectId, thumbFile), at).catch(() => (thumbFile = undefined));
     }
+    let strip: Asset['filmstrip'];
+    if (info.hasVideo && !info.isImage && info.duration) {
+      const stripFile = `${assetId}.strip.jpg`;
+      strip = await filmstrip(file, store.mediaPath(projectId, stripFile), info.duration, info.width ?? 16, info.height ?? 9)
+        .then((r) => ({ file: stripFile, ...r }))
+        .catch(() => undefined);
+    }
     let peaksFile: string | undefined;
     if (info.hasAudio && info.duration) {
       peaksFile = `${assetId}.peaks.json`;
@@ -156,6 +163,7 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
       a.meta = { duration: info.duration, width: info.width, height: info.height, fps: info.fps, hasAudio: info.hasAudio, hasVideo: info.hasVideo, codec: info.codec };
       a.thumb = thumbFile;
       a.waveform = peaksFile;
+      a.filmstrip = strip;
     });
     const settings = getSettings();
     const fresh = (await store.get(projectId)).assets.find((a) => a.id === assetId);
@@ -176,6 +184,25 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
     });
     throw err;
   }
+};
+
+const stripsInFlight = new Map<string, Promise<void>>();
+
+/** Generate the timeline filmstrip for a video asset that predates filmstrips (no-op if present). */
+export const ensureFilmstrip = (projectId: string, assetId: string): Promise<void> => {
+  const key = `${projectId}/${assetId}`;
+  let job = stripsInFlight.get(key);
+  if (!job) {
+    job = (async () => {
+      const asset = (await store.get(projectId)).assets.find((a) => a.id === assetId);
+      if (!asset || asset.kind !== 'video' || asset.filmstrip || !asset.meta.duration) return;
+      const stripFile = `${assetId}.strip.jpg`;
+      const r = await filmstrip(store.mediaPath(projectId, asset.file), store.mediaPath(projectId, stripFile), asset.meta.duration, asset.meta.width ?? 16, asset.meta.height ?? 9);
+      await patchAsset(projectId, assetId, 'Filmstrip ready', (a) => void (a.filmstrip = { file: stripFile, ...r }));
+    })().finally(() => stripsInFlight.delete(key));
+    stripsInFlight.set(key, job);
+  }
+  return job;
 };
 
 /** Queue a transcription (no-op if no engine is available). Resolves with the word count. */

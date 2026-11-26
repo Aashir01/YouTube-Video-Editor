@@ -346,6 +346,10 @@ export const AssetSchema = z.object({
     .default({}),
   thumb: z.string().optional(),
   waveform: z.string().optional().describe('Peaks JSON file name'),
+  filmstrip: z
+    .object({ file: z.string(), count: z.number(), interval: z.number(), tileW: z.number(), tileH: z.number() })
+    .optional()
+    .describe('Sprite of evenly spaced frames for the timeline'),
   transcript: z
     .object({
       status: z.enum(['none', 'pending', 'done', 'error']).default('none'),
