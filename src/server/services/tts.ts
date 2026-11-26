@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { importOptional, type TransformersModule } from '../optional';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -47,7 +48,7 @@ const GEMINI_VOICES: [string, string][] = [
 
 export const kokoroAvailable = async () => {
   try {
-    await import('kokoro-js');
+    await importOptional('kokoro-js');
     return true;
   } catch {
     return false;
@@ -103,7 +104,7 @@ export const listVoices = async (s: Settings): Promise<{ engine: TtsEngineId; la
   if (s.keys.gemini) out.push({ engine: 'gemini', label: 'Gemini TTS', default: s.speech.geminiVoice, voices: GEMINI_VOICES.map(([id, d]) => ({ id, name: id, description: d })) });
   if (await kokoroAvailable()) {
     try {
-      const { VOICES } = (await import('kokoro-js')) as unknown as { VOICES: Record<string, { name: string; language: string; gender: string; traits?: string; overallGrade?: string }> };
+      const { VOICES } = (await importOptional('kokoro-js')) as { VOICES: Record<string, { name: string; language: string; gender: string; traits?: string; overallGrade?: string }> };
       out.push({
         engine: 'kokoro',
         label: 'Kokoro (local, free)',
@@ -239,9 +240,9 @@ let kokoroPromise: Promise<KokoroInstance> | null = null;
 const kokoro = async (text: string, s: Settings, voice?: string, speed?: number): Promise<Omit<SpeechResult, 'duration'>> => {
   if (!kokoroPromise) {
     kokoroPromise = (async () => {
-      const tf = await import('@huggingface/transformers');
+      const tf = await importOptional<TransformersModule>('@huggingface/transformers');
       tf.env.cacheDir = path.join(CACHE_DIR, 'models');
-      const { KokoroTTS } = (await import('kokoro-js')) as unknown as { KokoroTTS: { from_pretrained: (id: string, o: Record<string, unknown>) => Promise<KokoroInstance> } };
+      const { KokoroTTS } = (await importOptional('kokoro-js')) as { KokoroTTS: { from_pretrained: (id: string, o: Record<string, unknown>) => Promise<KokoroInstance> } };
       return KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype: 'q8', device: 'cpu' });
     })();
     kokoroPromise.catch(() => (kokoroPromise = null));
