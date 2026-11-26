@@ -119,6 +119,51 @@ const Placement: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ cl
   );
 };
 
+const FOCUS_PRESETS: { label: string; x: number; y: number }[] = [
+  { label: 'Center', x: 0.5, y: 0.5 },
+  { label: 'Left', x: 0.2, y: 0.5 },
+  { label: 'Right', x: 0.8, y: 0.5 },
+  { label: 'Top', x: 0.5, y: 0.2 },
+  { label: 'Face', x: 0.5, y: 0.35 },
+];
+
+/** Crop focus and static zoom: the controls for reframing (e.g. 16:9 footage in a 9:16 Short). */
+const Reframe: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip, patch }) => {
+  const f = clip.focus ?? { x: 0.5, y: 0.5 };
+  const changed = Boolean(clip.focus) || clip.scale !== 1;
+  return (
+    <Section
+      title="Reframe"
+      defaultOpen={changed}
+      right={
+        changed ? (
+          <button className="text-[11px] font-semibold text-dim hover:text-text" onClick={() => patch({ focus: null, scale: 1 })}>
+            Reset
+          </button>
+        ) : undefined
+      }
+    >
+      <p className="-mt-1 text-[11px] leading-snug text-dim">Drag the picture in the preview to pan it. Zoom in to crop tighter.</p>
+      <RangeField label="Zoom" value={clip.scale} min={1} max={3} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => patch({ scale: Math.round(v * 100) / 100 })} />
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField label="Focus X" value={f.x} min={0} max={1} step={0.01} onChange={(v) => patch({ focus: { ...f, x: v } })} />
+        <NumberField label="Focus Y" value={f.y} min={0} max={1} step={0.01} onChange={(v) => patch({ focus: { ...f, y: v } })} />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {FOCUS_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            onClick={() => patch({ focus: { x: p.x, y: p.y } })}
+            className={cn('rounded-md border px-2 py-0.5 text-[11px] font-semibold', Math.abs(f.x - p.x) < 0.01 && Math.abs(f.y - p.y) < 0.01 ? 'border-accent bg-accent/15 text-text' : 'border-line text-muted hover:text-text')}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </Section>
+  );
+};
+
 const Grade: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip, patch }) => {
   const g = clip.grade ?? { preset: 'none', brightness: 1, contrast: 1, saturation: 1, hue: 0, vignette: 0, blur: 0 };
   const set = (p: Record<string, unknown>) => patch({ grade: { ...g, ...p } });
@@ -224,6 +269,7 @@ const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch 
         </button>
       </Section>
       <Placement clip={clip} patch={patch} />
+      <Reframe clip={clip} patch={patch} />
       <Motion clip={clip} patch={patch} />
       <Grade clip={clip} patch={patch} />
     </>
@@ -233,6 +279,7 @@ const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch 
 const ImageEditor: React.FC<{ clip: ImageClip; patch: Patch }> = ({ clip, patch }) => (
   <>
     <Placement clip={clip} patch={patch} />
+    <Reframe clip={clip} patch={patch} />
     <Section title="Backdrop" defaultOpen={false}>
       <Switch label="Blurred backdrop behind letterboxing" checked={clip.blurredBackdrop} onChange={(v) => patch({ blurredBackdrop: v })} />
     </Section>
@@ -269,10 +316,20 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
 const TextEditor: React.FC<{ clip: TextClip; patch: Patch }> = ({ clip, patch }) => {
   const st = clip.style;
   const style = (p: Record<string, unknown>) => patch({ style: p });
+  // double-clicking text on the canvas jumps here
+  useEffect(() => {
+    const focus = () => {
+      const el = document.getElementById('inspector-text') as HTMLTextAreaElement | null;
+      el?.focus();
+      el?.select();
+    };
+    window.addEventListener('cutroom:focus-text', focus);
+    return () => window.removeEventListener('cutroom:focus-text', focus);
+  }, []);
   return (
     <>
       <Section title="Text">
-        <TextArea value={clip.text} onChange={(v) => patch({ text: v })} rows={3} />
+        <TextArea id="inspector-text" value={clip.text} onChange={(v) => patch({ text: v })} rows={3} />
         <p className="-mt-1 text-[11px] text-dim">Wrap words in *asterisks* to highlight them.</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="In">

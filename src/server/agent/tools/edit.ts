@@ -12,8 +12,8 @@ const Transition = z.object({ type: z.enum(TRANSITION_TYPES), duration: z.number
 
 const CLIP_REFERENCE = `Clip fields (times in seconds, positions 0-1 of the canvas, sizes in design px where 1u = 1px at 1080p):
 - all: type, start, duration, name?, transitionIn/transitionOut {type: ${TRANSITION_TYPES.join('|')}, duration}
-- video: assetId, trimStart (source offset), speed, volume (0-2), muted, fit cover|contain|fill, zooms [{at (s from clip start), duration, scale, x, y, style smooth|snap|slow-push}], kenBurns {fromScale,toScale,fromX,fromY,toX,toY,easing}, box {x,y,w,h} (picture-in-picture), radius, shadow, opacity, rotation, flipX, grade {preset none|cinematic|warm|cool|vibrant|muted|bw|vintage|teal-orange|punchy, brightness, contrast, saturation, hue, vignette, blur}, audioFadeIn, audioFadeOut
-- image: assetId, fit, kenBurns, blurredBackdrop, box, radius, shadow, opacity, grade
+- video: assetId, trimStart (source offset), speed, volume (0-2), muted, fit cover|contain|fill, focus {x,y} (0-1 point kept in frame when cropped: reframe 16:9 footage for 9:16, e.g. the speaker's face), scale (static zoom, 1 = fitted), zooms [{at (s from clip start), duration, scale, x, y, style smooth|snap|slow-push}], kenBurns {fromScale,toScale,fromX,fromY,toX,toY,easing}, box {x,y,w,h} (picture-in-picture), radius, shadow, opacity, rotation, flipX, grade {preset none|cinematic|warm|cool|vibrant|muted|bw|vintage|teal-orange|punchy, brightness, contrast, saturation, hue, vignette, blur}, audioFadeIn, audioFadeOut
+- image: assetId, fit, focus, scale, kenBurns, blurredBackdrop, box, radius, shadow, opacity, grade
 - audio: assetId, role voiceover|music|sfx|original, trimStart, speed, volume, fadeIn, fadeOut, duck (lower under speech), loop
 - text: text (wrap words in *asterisks* to highlight), x, y (center anchor), style {font, size, weight, color, align, uppercase, background, padding, radius, strokeColor, strokeWidth, shadow, highlightColor, maxWidth}, animationIn/animationOut none|fade|rise|pop|slide-left|slide-right|typewriter|words|letters|blur-in|scale-down
 - scene: template, props (see list_templates) — prefer add_scene

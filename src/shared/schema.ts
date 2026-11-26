@@ -129,8 +129,17 @@ const clipBase = {
   transitionOut: TransitionSchema.optional(),
 };
 
+export const FocusSchema = z
+  .object({
+    x: z.number().min(0).max(1).default(0.5),
+    y: z.number().min(0).max(1).default(0.5),
+  })
+  .describe('Which point of the media stays in frame when it is cropped (fit cover / scale > 1). 0-1 of the media; use it to reframe 16:9 footage for 9:16');
+
 const visualProps = {
   box: BoxSchema.optional(),
+  focus: FocusSchema.optional(),
+  scale: z.number().min(0.2).max(5).default(1).describe('Static zoom of the media inside its frame (1 = as fitted). Zooms around focus'),
   opacity: z.number().min(0).max(1).default(1),
   radius: z.number().min(0).default(0).describe('Corner radius in design px (picture-in-picture look)'),
   shadow: z.boolean().default(false),
@@ -519,6 +528,7 @@ export const ProjectSchema = z.object({
 
 export type Transition = z.infer<typeof TransitionSchema>;
 export type Box = z.infer<typeof BoxSchema>;
+export type Focus = z.infer<typeof FocusSchema>;
 export type KenBurns = z.infer<typeof KenBurnsSchema>;
 export type Zoom = z.infer<typeof ZoomSchema>;
 export type ColorGrade = z.infer<typeof ColorGradeSchema>;
