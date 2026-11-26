@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Popover } from 'radix-ui';
-import { ArrowLeft, CircleCheck, CircleX, Download, Monitor, Redo2, Settings, Smartphone, Square, Undo2, WifiOff } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CircleCheck, CircleX, CloudCheck, Download, Monitor, Redo2, Search, Settings, Smartphone, Square, Undo2, WifiOff } from 'lucide-react';
 import { ASPECTS, aspectOf, type Aspect } from '../../../shared/timeline';
 import { useStudio } from '../../lib/store';
 import { navigate } from '../../lib/nav';
@@ -123,6 +123,64 @@ const Activity: React.FC = () => {
   );
 };
 
+/** Undo history: jump back several steps at once. */
+const HistoryMenu: React.FC = () => {
+  const past = useStudio((s) => s.history.past ?? []);
+  const undoSteps = useStudio((s) => s.undoSteps);
+  if (past.length === 0) return null;
+  return (
+    <Popover.Root>
+      <Tip label="Undo history">
+        <Popover.Trigger asChild>
+          <button className="-ml-1 rounded-md p-0.5 text-dim hover:bg-panel-3 hover:text-text" aria-label="Undo history">
+            <ChevronDown className="size-3" />
+          </button>
+        </Popover.Trigger>
+      </Tip>
+      <Popover.Portal>
+        <Popover.Content align="start" sideOffset={6} className="glass-pop z-[90] w-72 rounded-xl p-1">
+          <div className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-dim">Undo back to…</div>
+          <div className="max-h-80 overflow-y-auto">
+            {past.map((label, i) => (
+              <Popover.Close asChild key={i}>
+                <button onClick={() => void undoSteps(i + 1)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-muted hover:bg-panel-3 hover:text-text">
+                  <Undo2 className="size-3.5 shrink-0 text-accent-2-ink" />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="shrink-0 text-[10px] text-dim">{i === 0 ? 'last' : `${i + 1} steps`}</span>
+                </button>
+              </Popover.Close>
+            ))}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+};
+
+/** Saving… / Saved: every edit is persisted on the server as it happens. */
+const SaveState: React.FC = () => {
+  const unsaved = useStudio((s) => s.unsaved);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (unsaved > 0) return setShow(true);
+    const t = setTimeout(() => setShow(false), 2500);
+    return () => clearTimeout(t);
+  }, [unsaved]);
+  return (
+    <span className={cn('ml-1.5 flex items-center gap-1 text-[11px] transition-opacity', show ? 'opacity-100' : 'opacity-0')} aria-live="polite">
+      {unsaved > 0 ? (
+        <>
+          <Spinner className="size-3 text-dim" /> <span className="text-dim">Saving…</span>
+        </>
+      ) : (
+        <>
+          <CloudCheck className="size-3.5 text-ok" /> <span className="text-dim">Saved</span>
+        </>
+      )}
+    </span>
+  );
+};
+
 export const TopBar: React.FC = () => {
   const history = useStudio((s) => s.history);
   const undo = useStudio((s) => s.undo);
@@ -148,15 +206,25 @@ export const TopBar: React.FC = () => {
       <IconBtn label="Undo" shortcut={`${modKey}Z`} disabled={!history.canUndo} onClick={() => void undo()}>
         <Undo2 className="size-4" />
       </IconBtn>
+      <HistoryMenu />
       <IconBtn label="Redo" shortcut={`⇧${modKey}Z`} disabled={!history.canRedo} onClick={() => void redo()}>
         <Redo2 className="size-4" />
       </IconBtn>
+      <SaveState />
       {!connected && (
         <span className="ml-2 flex items-center gap-1 text-xs text-warn" title="Live updates are reconnecting">
           <WifiOff className="size-3.5" /> Reconnecting…
         </span>
       )}
       <div className="flex-1" />
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent('cutroom:palette'))}
+        className="mr-1 hidden h-8 w-64 items-center gap-2 rounded-lg border border-line bg-black/25 px-2.5 text-xs text-dim transition-colors hover:border-line-2 hover:text-muted lg:flex"
+      >
+        <Search className="size-3.5" />
+        <span className="flex-1 text-left">Search or ask the Director…</span>
+        <kbd className="rounded border border-line-2 px-1 font-mono text-[10px]">{modKey}K</kbd>
+      </button>
       <Activity />
       <IconBtn label="Settings" onClick={() => openSettings()}>
         <Settings className="size-4" />

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AudioLines,
@@ -191,6 +191,12 @@ const ProjectMedia: React.FC = () => {
 
   const list = assets.filter((a) => filter === 'all' || a.kind === filter || (filter === 'document' && a.kind === 'other')).slice().reverse();
   const sel = assets.find((a) => a.id === selected);
+
+  useEffect(() => {
+    const open = () => fileInput.current?.click();
+    window.addEventListener('cutroom:upload', open);
+    return () => window.removeEventListener('cutroom:upload', open);
+  }, []);
 
   const importUrl = () => {
     const url = prompt('Paste a direct link to a video, image, audio file or document:');

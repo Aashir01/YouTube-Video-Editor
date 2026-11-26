@@ -66,6 +66,10 @@ interface StudioStore {
   composerFocusTick: number;
   /** Text to place in the chat composer (e.g. a brief typed before an AI model was configured). */
   composerPrefill: string | null;
+  /** Edits not yet confirmed by the server (in flight or waiting to be sent). */
+  unsaved: number;
+  /** Undo several steps (history menu). */
+  undoSteps: (n: number) => Promise<void>;
   /** Open recorder (voice / camera / screen), or null. */
   recorder: 'voice' | 'camera' | 'screen' | null;
   /** Asset ids attached to the next chat message. */
@@ -166,7 +170,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       case 'project':
         // our own edits come back in the HTTP response; skip their echo while requests are in flight
         if (e.source === 'user' && (pendingOps > 0 || queued.size > 0)) return;
-        setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo });
+        setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo, past: e.past });
         return;
       case 'agent':
         set({ chat: applyAgentEvent(get().chat, e.event) });
@@ -243,6 +247,10 @@ export const useStudio = create<StudioStore>((set, get) => {
     composerPrefill: null,
     composerAttachments: [],
     recorder: null,
+    unsaved: 0,
+    undoSteps: async (n) => {
+      for (let i = 0; i < n && get().history.canUndo; i++) await get().undo();
+    },
     attachToChat: (ids) => {
       set({ composerAttachments: [...new Set([...get().composerAttachments, ...ids])] });
       get().focusComposer();
@@ -293,6 +301,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         return null;
       }
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       const seq = ++opSeq;
       // requests run one after another so the server sees edits in the order they were made
       const request = opChain.then(() => api.ops(projectId, ops, label));
@@ -308,6 +317,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         return null;
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 
@@ -324,6 +334,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       }
       const prev = queued.get(key);
       queued.set(key, { op: prev ? mergeOps(prev.op, op) : op, label });
+      set({ unsaved: pendingOps + queued.size });
       if (queueTimer) clearTimeout(queueTimer);
       queueTimer = setTimeout(() => get().flushEdits(), 450);
     },
@@ -334,6 +345,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       if (queued.size === 0) return;
       const items = [...queued.values()];
       queued.clear();
+      set({ unsaved: pendingOps + queued.size });
       void get().edit(
         items.map((i) => i.op),
         items.length === 1 ? items[0]!.label : `${items[0]!.label} (+${items.length - 1})`,
@@ -345,6 +357,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       const id = get().projectId;
       if (!id) return;
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       try {
         const r = await api.undo(id);
         setProject(r.project, r.history);
@@ -353,6 +366,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         toast.error(errorText(err));
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 
@@ -361,6 +375,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       const id = get().projectId;
       if (!id) return;
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       try {
         const r = await api.redo(id);
         setProject(r.project, r.history);
@@ -369,6 +384,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         toast.error(errorText(err));
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 

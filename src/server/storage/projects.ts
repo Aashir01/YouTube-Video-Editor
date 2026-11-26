@@ -191,7 +191,7 @@ export class ProjectStore {
   private emitProject(id: string, label: string, source: UpdateSource) {
     const s = this.states.get(id);
     if (!s) return;
-    bus.emit(id, { type: 'project', project: s.project, label, source, canUndo: s.past.length > 0, canRedo: s.future.length > 0 });
+    bus.emit(id, { type: 'project', project: s.project, label, source, canUndo: s.past.length > 0, canRedo: s.future.length > 0, past: s.past.slice(-20).map((h) => h.label).reverse() });
   }
 
   async undo(id: string): Promise<{ project: Project; label: string } | null> {
