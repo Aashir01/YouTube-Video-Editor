@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { importOptional, type TransformersModule } from '../optional';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import OpenAI from 'openai';
@@ -25,7 +26,7 @@ const whisperCppDir = () => path.join(CACHE_DIR, 'whisper.cpp');
 
 export const localWhisperAvailable = async (): Promise<boolean> => {
   try {
-    await import('@huggingface/transformers');
+    await importOptional('@huggingface/transformers');
     return true;
   } catch {
     return false;
@@ -184,7 +185,7 @@ const getLocalPipe = (model: string, onProgress?: (p: number) => void): Promise<
   let p = pipes.get(model);
   if (!p) {
     p = (async () => {
-      const tf = await import('@huggingface/transformers');
+      const tf = await importOptional<TransformersModule>('@huggingface/transformers');
       tf.env.cacheDir = path.join(CACHE_DIR, 'models');
       const pipe = await tf.pipeline('automatic-speech-recognition', model, {
         dtype: 'q8',

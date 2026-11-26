@@ -22,6 +22,7 @@ import { localWhisperAvailable, pickTranscriptionEngine } from '../services/tran
 import { listModels, testModel } from '../ai/llm';
 import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
+import { importOptional } from '../optional';
 
 export const api = new Hono();
 
@@ -44,7 +45,7 @@ api.get('/system', async (c) => {
   const [stt, tts] = await Promise.all([pickTranscriptionEngine(s), pickTtsEngine(s)]);
   let kokoro = false;
   try {
-    await import('kokoro-js');
+    await importOptional('kokoro-js');
     kokoro = true;
   } catch {
     /* optional */
