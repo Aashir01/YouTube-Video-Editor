@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CirclePlus, Mic, Pause, Play } from 'lucide-react';
+import { Circle, CirclePlus, Mic, Pause, Play } from 'lucide-react';
 import { api, librarySoundUrl, type LibrarySound } from '../../../lib/api';
 import { useStudio } from '../../../lib/store';
 import { addAtPlayhead, clearDragPayload, setDragPayload } from '../../../lib/dnd';
@@ -132,6 +132,12 @@ export const AudioPanel: React.FC = () => {
     <div className="flex h-full flex-col">
       <PanelHeader title="Audio" />
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <Section title="Record">
+          <button className="btn w-full" onClick={() => useStudio.setState({ recorder: 'voice' })}>
+            <Circle className="size-3.5 text-danger" fill="currentColor" /> Record your voice
+          </button>
+          <p className="text-[11px] leading-snug text-dim">Narrate over the picture: the take lands on the Voiceover track at the playhead and gets transcribed for captions.</p>
+        </Section>
         <Section title="AI voiceover">
           <Voiceover />
         </Section>

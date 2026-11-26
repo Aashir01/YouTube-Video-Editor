@@ -50,6 +50,14 @@ export const player = {
   get playing() {
     return ref?.isPlaying() ?? false;
   },
+  /** Mute the preview; returns a function that restores the previous state. */
+  muteTemporarily(): () => void {
+    const was = ref?.isMuted() ?? true;
+    ref?.mute();
+    return () => {
+      if (!was) ref?.unmute();
+    };
+  },
   step(frames: number) {
     const cur = ref ? ref.getCurrentFrame() : Math.round(useStudio.getState().time * fps);
     this.seek((cur + frames) / fps);

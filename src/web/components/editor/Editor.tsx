@@ -32,6 +32,7 @@ import { LeftPanel } from './LeftPanel';
 import { Inspector } from './Inspector';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ExportDialog } from './ExportDialog';
+import { RecordDialog } from './RecordDialog';
 
 /** Drag handle between panels. */
 const Resizer: React.FC<{ dir: 'x' | 'y'; onDrag: (delta: number) => void; className?: string }> = ({ dir, onDrag, className }) => (
@@ -246,6 +247,7 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
         </div>
       </div>
       <ExportDialog />
+      <RecordDialog />
     </div>
   );
 };

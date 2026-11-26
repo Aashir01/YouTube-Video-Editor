@@ -8,7 +8,7 @@ import { bus } from '../events';
 import { analysisQueue, transcriptionQueue } from '../jobs';
 import { store } from '../storage/projects';
 import { DOCUMENT_EXTENSIONS, extractDocumentText, parseSubtitles } from '../services/documents';
-import { filmstrip, probe, thumbnail, waveformPeaks } from './ffmpeg';
+import { filmstrip, probe, remuxInPlace, thumbnail, waveformPeaks } from './ffmpeg';
 
 const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.mts', '.m2ts', '.3gp', '.wmv', '.flv', '.mpg', '.mpeg'];
 const AUDIO_EXT = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac', '.aiff', '.aif', '.wma', '.weba'];
@@ -136,6 +136,8 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
       }
       return;
     }
+    // browser recordings (MediaRecorder WebM) need a remux before their duration is known
+    if (path.extname(asset.file).toLowerCase() === '.webm') await remuxInPlace(file).catch(() => false);
     const info = await probe(file);
     let thumbFile: string | undefined;
     if (info.hasVideo || info.isImage || asset.kind === 'image') {

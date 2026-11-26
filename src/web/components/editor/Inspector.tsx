@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, MessageSquareText, MousePointerClick, Plus, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Plus, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import {
   CAPTION_PRESETS,
   EASINGS,
@@ -21,7 +21,7 @@ import { FONTS } from '../../../shared/fonts';
 import { clipEnd } from '../../../shared/timeline';
 import { api, type TemplateInfo } from '../../lib/api';
 import { clipLabel, getClipRef, useStudio } from '../../lib/store';
-import { duplicateSelection, splitAtPlayhead } from '../../lib/actions';
+import { duplicateSelection, enhanceSpeech, splitAtPlayhead } from '../../lib/actions';
 import { cn, errorText } from '../../lib/utils';
 import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
@@ -267,6 +267,9 @@ const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch 
         >
           <Scissors className="size-3.5" /> Auto-cut silences & fillers
         </button>
+        <button className="btn btn-sm" onClick={() => void enhanceSpeech(clip.assetId)}>
+          <AudioWaveform className="size-3.5" /> Enhance speech (denoise & level)
+        </button>
       </Section>
       <Placement clip={clip} patch={patch} />
       <Reframe clip={clip} patch={patch} />
@@ -309,6 +312,11 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
       <NumberField label="Fade out" value={clip.fadeOut} min={0} step={0.1} unit="s" onChange={(v) => patch({ fadeOut: v })} />
     </div>
     <Switch label="Duck under speech" checked={clip.duck} onChange={(v) => patch({ duck: v })} />
+    {(clip.role === 'voiceover' || clip.role === 'original') && (
+      <button className="btn btn-sm" onClick={() => void enhanceSpeech(clip.assetId)}>
+        <AudioWaveform className="size-3.5" /> Enhance speech (denoise & level)
+      </button>
+    )}
     <Switch label="Loop to fill the clip" checked={clip.loop} onChange={(v) => patch({ loop: v })} />
   </Section>
 );
