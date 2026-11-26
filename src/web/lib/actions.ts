@@ -211,3 +211,20 @@ export const shuttle = (key: 'j' | 'k' | 'l') => {
   if (!playing) player.play();
   if (Math.abs(next) !== 1) toast(`${next > 0 ? '▶' : '◀'} ${Math.abs(next)}×`, { duration: 700, id: 'shuttle' });
 };
+
+// ---------------------------------------------------------------------------
+// Text-based editing
+// ---------------------------------------------------------------------------
+
+/** Cut several timeline ranges (closing the gaps) as one undo step. Later ranges go first so earlier times stay valid. */
+export const cutRanges = async (ranges: [number, number][], label: string): Promise<boolean> => {
+  const { project, edit } = useStudio.getState();
+  if (!project || ranges.length === 0) return false;
+  const trackIds = syncTrackIds(project);
+  const ops = [...ranges]
+    .filter(([a, b]) => b - a > 0.01)
+    .sort((a, b) => b[0] - a[0])
+    .map(([from, to]) => ({ op: 'rippleDelete' as const, from, to, trackIds }));
+  if (ops.length === 0) return false;
+  return Boolean(await edit(ops, label));
+};

@@ -10,7 +10,7 @@ import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
-export type LeftTab = 'media' | 'graphics' | 'script' | 'audio' | 'brand';
+export type LeftTab = 'media' | 'transcript' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
 export type SettingsSection = 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
