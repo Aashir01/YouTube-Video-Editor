@@ -23,7 +23,7 @@ const CLIP_REFERENCE = `Clip fields (times in seconds, positions 0-1 of the canv
 Tracks can be referenced by id or name: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX.`;
 
 const OpItem = z.object({
-  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'liftRange', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix', 'addMarker', 'removeMarker', 'setKeyframe', 'removeKeyframe', 'clearKeyframes']),
+  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'liftRange', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix', 'addMarker', 'removeMarker', 'setKeyframe', 'removeKeyframe', 'clearKeyframes', 'switchAngle']),
   clip: z.record(z.string(), z.unknown()).optional().describe('addClip: the clip object'),
   clipId: z.string().optional(),
   clipIds: z.array(z.string()).optional(),
@@ -47,6 +47,7 @@ const OpItem = z.object({
   values: z.record(z.string(), z.number()).optional().describe('setKeyframe: channel -> value at `time`, e.g. {"opacity": 0, "box.x": 0.1}'),
   channels: z.array(z.string()).optional().describe('removeKeyframe/clearKeyframes: limit to these channels (default all)'),
   ease: z.enum(KEYFRAME_EASES).optional().describe('setKeyframe: how the value moves to the next keyframe'),
+  angle: z.number().int().min(0).max(8).optional().describe('switchAngle: camera number, 0-based (camera 1 = 0)'),
 });
 
 const resolveTrackIds = (p: Project, ids?: string[]) => ids?.map((t) => requireTrack(p, t).id);
@@ -98,13 +99,15 @@ const toEditOp = (p: Project, o: z.infer<typeof OpItem>): EditOp => {
       return { op: 'removeKeyframe', clipId: need(o.clipId, 'clipId'), t: need(o.time, 'time'), channels: o.channels };
     case 'clearKeyframes':
       return { op: 'clearKeyframes', clipId: need(o.clipId, 'clipId'), channels: o.channels, keepAt: o.time };
+    case 'switchAngle':
+      return { op: 'switchAngle', clipId: need(o.clipId, 'clipId'), angle: need(o.angle, 'angle'), at: o.at };
   }
 };
 
 export const applyEdits = defineTool({
   name: 'apply_edits',
   category: 'edit',
-  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?} (cut a range and close the gap), liftRange {from, to, trackIds?} (clear a range, leave the gap), shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}, addMarker {time, label?} (review notes for the user), removeMarker {markerId}, setKeyframe {clipId, time (s from clip start), values {channel: value}, ease?}, removeKeyframe {clipId, time, channels?}, clearKeyframes {clipId, channels?, time? (value kept)}. onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
+  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?} (cut a range and close the gap), liftRange {from, to, trackIds?} (clear a range, leave the gap), shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}, addMarker {time, label?} (review notes for the user), removeMarker {markerId}, setKeyframe {clipId, time (s from clip start), values {channel: value}, ease?}, removeKeyframe {clipId, time, channels?}, clearKeyframes {clipId, channels?, time? (value kept)}, switchAngle {clipId, angle (0-based camera), at? (cut there first)} (multicam cuts: show another camera at the same moment). onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
   schema: z.object({ label: z.string().describe('Short description for undo history'), ops: z.array(OpItem).min(1).max(80) }),
   execute: async (input, ctx) => {
     let results: unknown[] = [];
@@ -272,10 +275,11 @@ export const addCaptions = defineTool({
   name: 'add_captions',
   category: 'edit',
   description:
-    'Add (or restyle) captions covering the whole video on the Captions track. Auto mode derives words live from the transcripts of footage and voiceover clips, so captions stay in sync after any edit. Presets: bold-pop, highlight-box, karaoke, clean, boxed, neon, typewriter, minimal. Load the captions-audio skill for guidance.',
+    'Add (or restyle) captions covering the whole video on the Captions track. Auto mode derives words live from the transcripts of footage and voiceover clips, so captions stay in sync after any edit. Presets: bold-pop, highlight-box, karaoke, clean, boxed, neon, typewriter, minimal. `language` shows them translated (translate_subtitles first). Load the captions-audio skill for guidance.',
   schema: z.object({
     style: CaptionStyleSchema.partial().default({}),
     trackIds: z.array(z.string()).optional().describe('Only caption speech from these tracks (default: all)'),
+    language: z.string().optional().describe('Show the captions in a translated language (a code passed to translate_subtitles, e.g. "es"); "" = the spoken language'),
   }),
   execute: async (input, ctx) => {
     let words = 0;
@@ -285,7 +289,8 @@ export const addCaptions = defineTool({
       const dur = Math.max(1, projectDuration(d));
       const style = { ...(existing && existing.type === 'captions' ? existing.style : {}), ...input.style };
       track.clips = track.clips.filter((c) => c.type !== 'captions');
-      applyOps(d, [{ op: 'addClip', trackId: track.id, clip: { id: existing?.id ?? '', type: 'captions', mode: 'auto', start: 0, duration: dur, style, sourceTrackIds: resolveTrackIds(d, input.trackIds) } }]);
+      const lang = input.language === undefined ? (existing?.type === 'captions' ? existing.language : undefined) : input.language || undefined;
+      applyOps(d, [{ op: 'addClip', trackId: track.id, clip: { id: existing?.id ?? '', type: 'captions', mode: 'auto', start: 0, duration: dur, style, sourceTrackIds: resolveTrackIds(d, input.trackIds), ...(lang ? { language: lang } : {}) } }]);
     });
     const transcripts = await store.transcriptsFor(p);
     words = timelineWords(p, transcripts).length;

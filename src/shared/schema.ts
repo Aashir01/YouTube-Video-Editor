@@ -177,6 +177,7 @@ export const VideoClipSchema = z.object({
   kenBurns: KenBurnsSchema.optional(),
   audioFadeIn: z.number().min(0).default(0),
   audioFadeOut: z.number().min(0).default(0),
+  multicam: Id.optional().describe('The multicam group this camera cut belongs to (switch cameras with the switchAngle op)'),
 });
 
 export const ImageClipSchema = z.object({
@@ -305,6 +306,7 @@ export const CaptionsClipSchema = z.object({
     .describe('auto = generated live from the transcripts of clips on the timeline (stays in sync after edits); manual = uses `words`'),
   words: z.array(WordSchema).default([]).describe('Timeline-relative words (manual mode only)'),
   sourceTrackIds: z.array(Id).optional().describe('Tracks to caption in auto mode (default: all tracks with speech)'),
+  language: z.string().max(16).optional().describe('Show the captions translated into this language (a code from the subtitle languages, e.g. "es"); unset = the spoken language'),
   style: CaptionStyleSchema.default(CaptionStyleSchema.parse({})),
 });
 
@@ -345,7 +347,7 @@ export const TrackSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const ASSET_KINDS = ['video', 'audio', 'image', 'document', 'other'] as const;
-export const ASSET_ORIGINS = ['upload', 'stock', 'generated', 'tts', 'render', 'url', 'library'] as const;
+export const ASSET_ORIGINS = ['upload', 'stock', 'generated', 'tts', 'render', 'url', 'library', 'processed'] as const;
 
 export const AssetSchema = z.object({
   id: Id,
@@ -367,6 +369,8 @@ export const AssetSchema = z.object({
       hasAudio: z.boolean().optional(),
       hasVideo: z.boolean().optional(),
       codec: z.string().optional(),
+      /** the picture has transparency (background removed) */
+      alpha: z.boolean().optional(),
     })
     .default({}),
   thumb: z.string().optional(),
@@ -376,6 +380,10 @@ export const AssetSchema = z.object({
     .optional()
     .describe('Sprite of evenly spaced frames for the timeline'),
   proxy: z.object({ file: z.string(), width: z.number(), height: z.number() }).optional().describe('Light copy for smooth editing; renders use the original'),
+  derived: z
+    .object({ from: Id, kind: z.enum(['background', 'greenscreen', 'stabilized', 'lut']), offset: z.number().describe('Where in the original this file starts (s)'), note: z.string().optional() })
+    .optional()
+    .describe('Made from another asset (background removed, stabilized, color look): the original can be restored'),
   transcript: z
     .object({
       status: z.enum(['none', 'pending', 'done', 'error']).default('none'),
@@ -412,6 +420,9 @@ export const AssetSchema = z.object({
       silences: z.array(z.tuple([z.number(), z.number()])).optional(),
       scenes: z.array(z.number()).optional(),
       loudnessLufs: z.number().optional(),
+      /** music: beat times (s of the source) and tempo, to snap and cut to */
+      beats: z.array(z.number()).optional(),
+      tempo: z.number().optional(),
     })
     .default({}),
 });
@@ -512,6 +523,8 @@ export const RenderRecordSchema = z.object({
   sizeBytes: z.number().optional(),
   error: z.string().optional(),
   elapsedSec: z.number().optional(),
+  /** languages with their own subtitle file next to the render (<id>.<lang>.srt) */
+  subtitles: z.array(z.string()).optional(),
 });
 
 export const MarkerSchema = z.object({
@@ -534,6 +547,25 @@ export const AudioMixSchema = z.object({
   loudnessTarget: z.number().min(-30).max(-8).default(-14).describe('Integrated LUFS target'),
 });
 
+/** A camera or microphone of a multicam recording, placed on the shared clock. */
+export const MulticamSourceSchema = z.object({
+  assetId: Id,
+  /** clock time (s) at which this file starts: its time s plays at offset + s */
+  offset: z.number(),
+  /** how sure the sync by sound was (z-score; the first camera is the reference) */
+  confidence: z.number().optional(),
+});
+
+/** Several cameras (and microphones) recording the same scene, lined up by their sound. */
+export const MulticamGroupSchema = z.object({
+  id: Id,
+  name: z.string().max(80).default('Multicam'),
+  angles: z.array(MulticamSourceSchema).min(1).max(9),
+  audio: z.array(MulticamSourceSchema).max(8).default([]),
+  /** the camera that shows everyone, if any (index into angles) */
+  wide: z.number().int().min(0).optional(),
+});
+
 export const ProjectSchema = z.object({
   schemaVersion: z.number().default(SCHEMA_VERSION),
   id: Id,
@@ -550,6 +582,7 @@ export const ProjectSchema = z.object({
   markers: z.array(MarkerSchema).default([]),
   renders: z.array(RenderRecordSchema).default([]),
   audio: AudioMixSchema.default(AudioMixSchema.parse({})),
+  multicam: z.array(MulticamGroupSchema).default([]),
 });
 
 // ---------------------------------------------------------------------------
@@ -563,6 +596,8 @@ export type KenBurns = z.infer<typeof KenBurnsSchema>;
 export type Zoom = z.infer<typeof ZoomSchema>;
 export type ColorGrade = z.infer<typeof ColorGradeSchema>;
 export type Word = z.infer<typeof WordSchema>;
+export type MulticamGroup = z.infer<typeof MulticamGroupSchema>;
+export type MulticamSource = z.infer<typeof MulticamSourceSchema>;
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 export type KeyframeEase = (typeof KEYFRAME_EASES)[number];
 export type Keyframes = z.infer<typeof KeyframesSchema>;
@@ -621,6 +656,8 @@ export interface CompositionInput extends Record<string, unknown> {
   transcripts: Record<string, Word[]>;
   /** 'preview' in the editor, 'render' for final output, 'still' for QA frames */
   mode: 'preview' | 'render' | 'still';
+  /** language -> sentence -> translation (captions shown in another language) */
+  translations?: Record<string, Record<string, string>>;
 }
 
 export interface ThumbnailInput extends Record<string, unknown> {

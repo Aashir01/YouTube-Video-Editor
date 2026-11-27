@@ -4,13 +4,13 @@ description: Step-by-step recipe for editing user footage (talking head, tutoria
 ---
 # Recipe: edit the user's footage
 
-1. **Understand the footage**: `inspect_assets`, then `transcribe` each speaking clip (if not already). Use `view_media` on the main footage (4–6 frames) to see framing, lighting and where the face is (for zoom focus). `annotate_asset` with what you learned.
+1. **Understand the footage**: `inspect_assets`, then `transcribe` each speaking clip (if not already). **Several cameras of one recording** (a podcast or interview with a wide shot and close-ups, maybe separate lav mics): build the edit with `create_multicam` first (cameras, plus `microphones` when there is one per person), then transcribe the microphone (or the first camera) and edit as below; fix any shot with `switchAngle` in `apply_edits`. Use `view_media` on the main footage (4–6 frames) to see framing, lighting and where the face is (for zoom focus). `annotate_asset` with what you learned.
 2. **Read the transcript** (`get_transcript` as sentences). Identify: the strongest opening line, retakes/mistakes (keep the last good take), tangents to drop, the key points and emotional peaks.
 3. **Clean the sound first** if the recording is noisy, echoey or uneven: `enhance_audio` on the footage (same timings, video untouched; use "strong" for noisy rooms). Then:
    **Rough cut**: `auto_cut` the main footage onto Main with `removeRanges` for bad takes/tangents and `jumpCutZoom: true`. Check the new length against the brief's target.
 4. **Hook**: if the best line is later in the video, consider a cold open (copy that segment to the start) or a `title-card`/`question` scene after the first sentence.
 5. **Zooms**: add `smooth` punch-ins (1.25–1.35×) on emphasis moments via `apply_edits` updateClip (`zooms`).
-6. **B-roll & graphics**: for each key claim/noun, add b-roll (user images/clips, stock) on the B-roll track, and graphics (lower third for the speaker's intro in the first 10–20s, charts for numbers, bullet lists for summaries). Load `motion-graphics`.
+6. **B-roll & graphics**: for each key claim/noun, add b-roll (user images/clips, stock) on the B-roll track, and graphics (to put the presenter in front of b-roll or a branded background, `remove_background` on their clip and place the background on a track below; green-screen footage uses mode "screen") (lower third for the speaker's intro in the first 10–20s, charts for numbers, bullet lists for summaries). Load `motion-graphics`.
 7. **Captions**: `add_captions` (style per format).
 8. **Audio**: music bed ducked under speech, SFX on graphics/transitions, fade out at the end.
 9. **Chapters**: `chapter-card` scenes or just metadata chapters at topic changes.

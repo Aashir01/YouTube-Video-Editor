@@ -21,6 +21,7 @@ import {
   Search,
   Trash2,
   TriangleAlert,
+  SwitchCamera,
   Upload,
   WandSparkles,
 } from 'lucide-react';
@@ -262,12 +263,15 @@ const ProjectMedia: React.FC = () => {
         <button className="btn btn-icon" title="Import from URL" onClick={importUrl}>
           <Link2 className="size-4" />
         </button>
+        <button className="btn btn-icon" title="Multicam: sync cameras by sound" aria-label="Multicam" onClick={() => useStudio.setState({ multicamOpen: true })}>
+          <SwitchCamera className="size-4" />
+        </button>
         <input
           ref={fileInput}
           type="file"
           multiple
           hidden
-          accept="video/*,audio/*,image/*,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.srt,.vtt,.html,.htm,.xml,.yaml,.yml,.rtf"
+          accept="video/*,audio/*,image/*,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.srt,.vtt,.html,.htm,.xml,.yaml,.yml,.rtf,.cube"
           onChange={(e) => {
             void upload([...(e.target.files ?? [])]);
             e.target.value = '';

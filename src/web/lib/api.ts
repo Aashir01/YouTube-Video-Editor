@@ -1,6 +1,8 @@
 import type { Project, RenderRecord, Word } from '../../shared/schema';
 import type { EditOp } from '../../shared/ops';
 import type { AnswerItem, ChatSnapshot } from '../../shared/agent-types';
+import type { MomentsState } from '../../shared/moments';
+import type { TranslationsState } from '../../shared/subtitles';
 
 export interface ProjectSummary {
   id: string;
@@ -144,6 +146,17 @@ export const api = {
 
   render: (id: string, body: { preset?: string; range?: [number, number]; audioOnly?: boolean }) => send<RenderRecord>('POST', `/api/projects/${id}/render`, body),
   createShort: (id: string, ranges: [number, number][], title?: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/shorts`, { ranges, title }),
+  moments: (id: string) => get<{ state: MomentsState | null; current: boolean }>(`/api/projects/${id}/moments`),
+  findMoments: (id: string, opts: { count?: number; minSec?: number; maxSec?: number; focus?: string }) => send<{ state: MomentsState; current: boolean }>('POST', `/api/projects/${id}/moments`, opts),
+  shortFromMoment: (id: string, momentId: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/moments/${momentId}/short`),
+  translations: (id: string) => get<{ state: TranslationsState; missing: Record<string, number> }>(`/api/projects/${id}/translations`),
+  translate: (id: string, languages: string[], metadata = true) =>
+    send<{ state: TranslationsState; missing: Record<string, number>; translated: number; failed: number }>('POST', `/api/projects/${id}/translations`, { languages, metadata }),
+  removeLanguage: (id: string, lang: string) => send<{ state: TranslationsState; missing: Record<string, number> }>('DELETE', `/api/projects/${id}/translations/${encodeURIComponent(lang)}`),
+  dub: (id: string, body: { language: string; voice?: string; original?: 'duck' | 'mute' }) => send<{ id: string; name: string; lines: number; cut: number; engine: string }>('POST', `/api/projects/${id}/dub`, body),
+  findBeats: (id: string, assetId: string) => send<{ tempo: number; beats: number }>('POST', `/api/projects/${id}/assets/${assetId}/beats`),
+  createMulticam: (id: string, body: { cameras: string[]; microphones?: string[]; follow?: 'speaker' | 'first'; wide?: string; at?: number }) =>
+    send<{ groupId: string; summary: string; warnings: string[]; cuts: number }>('POST', `/api/projects/${id}/multicam`, body),
   cancelRender: (id: string, renderId: string) => send('POST', `/api/projects/${id}/render/${renderId}/cancel`),
   deleteRender: (id: string, renderId: string) => send('DELETE', `/api/projects/${id}/render/${renderId}`),
   renderPresets: () => get<{ id: string; label: string }[]>('/api/render-presets'),
@@ -181,5 +194,7 @@ export const api = {
 };
 
 export const mediaUrl = (projectId: string, file: string) => `/media/${projectId}/${encodeURIComponent(file)}`;
+/** The current edit's subtitles in a language, as an SRT download. */
+export const subtitlesUrl = (projectId: string, lang: string) => `/api/projects/${projectId}/subtitles/${encodeURIComponent(lang)}.srt`;
 export const librarySoundUrl = (soundId: string) => `/api/library/${encodeURIComponent(soundId)}/audio`;
 export const renderUrl = (projectId: string, file: string, download = false) => `/renders/${projectId}/${encodeURIComponent(file)}${download ? '?download' : ''}`;

@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const PORT = Number(process.env.FAKE_LLM_PORT || 4590);
 const LOG = process.env.FAKE_LLM_LOG || path.join(__dirname, '.out', 'fake-llm.log');
@@ -42,8 +43,51 @@ const plan = (doneCount) => ({
   },
 });
 
+const textOf = (m) => (typeof m?.content === 'string' ? m.content : (m?.content ?? []).map((p) => p.text ?? '').join(''));
+
+// Find Shorts: pick the planted hooks by their sentence numbers, answering the way real models
+// often do (code fence, a trailing comma, an overlapping pick and an out-of-range one)
+const findShorts = (prompt) => {
+  const lines = [...prompt.matchAll(/^\[(\d+)\] \S+ (.*)$/gm)].map((m) => ({ n: Number(m[1]), text: m[2] }));
+  const at = (re) => lines.find((l) => re.test(l.text))?.n;
+  const focus = prompt.match(/What the creator wants: (.*)/)?.[1];
+  const tag = focus ? ` (${focus})` : '';
+  const picks = [];
+  const a = at(/^Here is the secret/);
+  const b = at(/^The biggest mistake/);
+  if (a !== undefined) picks.push({ from: a, to: a + 4, title: `The secret nobody shares${tag}`, why: 'Opens with a promise and pays it off', score: 9 });
+  if (b !== undefined) picks.push({ from: b, to: b + 4, title: `The biggest mistake${tag}`, why: 'Relatable and practical', score: 7 });
+  if (a !== undefined) picks.push({ from: a + 1, to: a + 5, title: 'Overlapping pick', why: 'duplicate', score: 5 });
+  picks.push({ from: 999, to: 1004, title: 'Out of range', why: '', score: 8 });
+  return 'Here are the best moments:\n```json\n{"shorts": [\n' + picks.map((p) => ' ' + JSON.stringify(p) + ',').join('\n') + '\n]}\n```';
+};
+
+// subtitles: "[es] <the line>", so a test can tell each translated line and its language apart
+const translate = (prompt) => {
+  const code = prompt.match(/\(([a-zA-Z-]+)\)/)?.[1] ?? 'xx';
+  if (/Translate this YouTube title and description/.test(prompt)) {
+    const title = prompt.match(/^Title: (.*)$/m)?.[1] ?? '';
+    const description = prompt.split('Description:\n')[1] ?? '';
+    return JSON.stringify({ title: `[${code}] ${title}`, description: `[${code}] ${description}` });
+  }
+  const lines = [...prompt.matchAll(/^(\d+)\. (.*)$/gm)].map((m) => `[${code}] ${m[2]}`);
+  return '```json\n' + JSON.stringify({ lines }) + '\n```';
+};
+
+// text to speech (OpenAI-style /audio/speech): a tone about as long as the line would take to say
+const speech = (input) => {
+  const seconds = Math.min(8, Math.max(0.4, input.length * 0.06));
+  const r = spawnSync(process.env.FFMPEG_PATH || 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `sine=frequency=260:sample_rate=24000:duration=${seconds.toFixed(2)}`, '-ac', '1', '-f', 'mp3', 'pipe:1'], { maxBuffer: 1 << 26 });
+  if (r.status !== 0) throw new Error(`ffmpeg failed: ${r.stderr}`);
+  return r.stdout;
+};
+
 const step = (body) => {
   const msgs = body.messages ?? [];
+  const system = textOf(msgs.find((m) => m.role === 'system'));
+  const lastUserText = textOf([...msgs].reverse().find((m) => m.role === 'user'));
+  if (!body.tools?.length && /YouTube Shorts editor/.test(system)) return { text: findShorts(lastUserText) };
+  if (!body.tools?.length && /You translate video subtitles/.test(system)) return { text: translate(lastUserText) };
   if (!body.tools?.length) return { text: 'Fake summary' };
   const called = [];
   for (const m of msgs) for (const tc of m.tool_calls ?? []) called.push(tc.function.name);
@@ -102,6 +146,13 @@ http
         if (req.method === 'GET' && req.url.endsWith('/models')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ object: 'list', data: [{ id: 'fake-director', object: 'model' }] }));
+        }
+        if (req.method === 'POST' && req.url.endsWith('/audio/speech')) {
+          const body = JSON.parse(raw);
+          const audio = speech(String(body.input ?? ''));
+          log('TTS', { voice: body.voice, chars: String(body.input ?? '').length, input: String(body.input ?? '').slice(0, 80) });
+          res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': audio.length });
+          return res.end(audio);
         }
         if (req.method === 'POST' && req.url.endsWith('/chat/completions')) {
           const body = JSON.parse(raw);

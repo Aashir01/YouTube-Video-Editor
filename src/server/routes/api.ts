@@ -23,6 +23,13 @@ import { listModels, testModel } from '../ai/llm';
 import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
 import { createShort } from '../shorts';
+import { findMoments, momentsAreCurrent, readMoments, shortFromMoment } from '../moments';
+import { applyMulticam, planMulticam } from '../multicam';
+import { readTranslations, removeLanguage, subtitleSource, subtitlesSrt, translateSubtitles } from '../subtitles';
+import { createDub } from '../dub';
+import { beatsFor } from '../footage';
+import { missingCounts } from '../../shared/subtitles';
+import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 
 export const api = new Hono();
@@ -150,6 +157,85 @@ api.post('/projects/:id/shorts', async (c) => {
   const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
   return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
 });
+
+/** Subtitles in other languages: the translations, and how many sentences of the current edit each still lacks. */
+const translationsReply = async (id: string) => {
+  const p = await store.get(id);
+  const state = await readTranslations(id);
+  return { state, missing: missingCounts(subtitleSource(p, await store.transcriptsFor(p)), state) };
+};
+
+api.get('/projects/:id/translations', async (c) => c.json(await translationsReply(c.req.param('id'))));
+
+api.post('/projects/:id/translations', async (c) => {
+  const id = c.req.param('id');
+  const body = z.object({ languages: z.array(z.string()).min(1).max(20), metadata: z.boolean().optional() }).parse(await c.req.json());
+  const r = await translateSubtitles(id, body.languages, { metadata: body.metadata });
+  return c.json({ ...(await translationsReply(id)), translated: r.translated, failed: r.missing });
+});
+
+api.delete('/projects/:id/translations/:lang', async (c) => {
+  await removeLanguage(c.req.param('id'), c.req.param('lang'));
+  return c.json(await translationsReply(c.req.param('id')));
+});
+
+/** The current edit's subtitles in one language, as an SRT download. */
+api.get('/projects/:id/subtitles/:file', async (c) => {
+  const id = c.req.param('id');
+  const lang = c.req.param('file').replace(/\.srt$/i, '');
+  const p = await store.get(id);
+  const srt = await subtitlesSrt(id, lang);
+  const name = `${p.name.replace(/[^\w\- ]+/g, '').trim() || 'subtitles'}.${lang}.srt`;
+  return new Response(srt, { headers: { 'Content-Type': 'application/x-subrip; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` } });
+});
+
+/** Find the beats of a music file (kept with the asset: the timeline shows them and snaps to them). */
+api.post('/projects/:id/assets/:assetId/beats', async (c) => {
+  const r = await beatsFor(c.req.param('id'), c.req.param('assetId'));
+  return c.json({ tempo: r.tempo, beats: r.beats.length });
+});
+
+/** A dubbed copy of the project in another language. */
+api.post('/projects/:id/dub', async (c) => {
+  const body = z.object({ language: z.string(), voice: z.string().optional(), original: z.enum(['duck', 'mute']).optional() }).parse(await c.req.json());
+  const r = await createDub(c.req.param('id'), body.language, { voice: body.voice, original: body.original });
+  return c.json({ id: r.project.id, name: r.project.name, lines: r.lines, cut: r.cut, engine: r.engine });
+});
+
+/** Multicam: sync cameras and microphones by sound and cut between them. */
+api.post('/projects/:id/multicam', async (c) => {
+  const id = c.req.param('id');
+  const body = z
+    .object({
+      cameras: z.array(z.string()).min(1).max(9),
+      microphones: z.array(z.string()).max(8).optional(),
+      follow: z.enum(['speaker', 'first']).optional(),
+      wide: z.string().optional(),
+      at: z.number().min(0).optional(),
+      name: z.string().max(80).optional(),
+    })
+    .parse(await c.req.json());
+  const plan = await analysisQueue.add(id, 'Multicam: syncing by sound', async (report) => planMulticam(await store.get(id), body, undefined, report));
+  await store.update(id, 'Multicam edit', (d) => void applyMulticam(d, plan), { source: 'user' });
+  return c.json({ groupId: plan.group.id, summary: plan.summary, warnings: plan.warnings, cuts: plan.cuts.length });
+});
+
+/** Find Shorts: the moments the AI picked (and whether the edit changed since). */
+api.get('/projects/:id/moments', async (c) => {
+  const id = c.req.param('id');
+  const state = await readMoments(id);
+  return c.json({ state, current: state ? await momentsAreCurrent(id, state) : true });
+});
+
+api.post('/projects/:id/moments', async (c) => {
+  const body = z
+    .object({ count: z.number().int().min(1).max(12).optional(), minSec: z.number().min(5).max(170).optional(), maxSec: z.number().min(10).max(180).optional(), focus: z.string().max(300).optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  const state = await findMoments(c.req.param('id'), body);
+  return c.json({ state, current: true });
+});
+
+api.post('/projects/:id/moments/:momentId/short', async (c) => c.json(await shortFromMoment(c.req.param('id'), c.req.param('momentId'))));
 
 api.post('/projects/:id/ops', async (c) => {
   const id = c.req.param('id');

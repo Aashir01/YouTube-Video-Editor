@@ -12,6 +12,7 @@ import {
   addMarkerAtPlayhead,
   clearRangeMarks,
   copySelection,
+  cutToCamera,
   deleteSelection,
   duplicateSelection,
   jumpToEdit,
@@ -33,6 +34,7 @@ import { Inspector } from './Inspector';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ExportDialog } from './ExportDialog';
 import { RecordDialog } from './RecordDialog';
+import { MulticamDialog } from './MulticamDialog';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -142,6 +144,8 @@ const useShortcuts = () => {
         s.focusComposer();
       } else if (e.key === '?') {
         window.dispatchEvent(new CustomEvent('cutroom:shortcuts'));
+      } else if (/^[1-9]$/.test(e.key) && !e.altKey) {
+        if (cutToCamera(Number(e.key) - 1)) e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -306,6 +310,7 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
       </div>
       <ExportDialog />
       <RecordDialog />
+      <MulticamDialog />
       <CommandPalette />
       <ShortcutsDialog />
     </div>

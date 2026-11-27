@@ -122,15 +122,15 @@ const Watermark: React.FC = () => {
   );
 };
 
-export const Main: React.FC<CompositionInput> = ({ project, assetUrls, transcripts, mode }) => {
+export const Main: React.FC<CompositionInput> = ({ project, assetUrls, transcripts, mode, translations }) => {
   const { width, height, fps } = useVideoConfig();
   const theme = useMemo(() => makeTheme(project.brand, width, height, fps), [project.brand, width, height, fps]);
   const fonts = useMemo(() => usedFonts(project), [project]);
   useFontsReady(fonts);
   const speech = useMemo(() => speechIntervals(project, transcripts ?? {}), [project, transcripts]);
   const value = useMemo(
-    () => ({ project, assetUrls: assetUrls ?? {}, transcripts: transcripts ?? {}, mode: mode ?? 'preview', speech }),
-    [project, assetUrls, transcripts, mode, speech],
+    () => ({ project, assetUrls: assetUrls ?? {}, transcripts: transcripts ?? {}, mode: mode ?? 'preview', speech, translations: translations ?? {} }),
+    [project, assetUrls, transcripts, mode, speech, translations],
   );
   return (
     <StudioProvider value={value} theme={theme}>

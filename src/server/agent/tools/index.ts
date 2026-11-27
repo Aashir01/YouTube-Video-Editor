@@ -8,10 +8,14 @@ import { addCaptions, addMedia, addScene, applyEdits, autoCut } from './edit';
 import { addLibrarySound, generateAudio, generateImageTool, importStock, searchStockTool } from './generate';
 import { listTemplates, writeCodeScene } from './motion';
 import { previewFrames } from './review';
-import { createShortTool, designThumbnail, renderVideo, setYouTubeMetadata } from './publish';
+import { createShortTool, designThumbnail, findShorts, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
 import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
+import { createMulticam } from './multicam';
+import { removeBackgroundTool } from './background';
+import { applyLutTool, cutToBeatTool, stabilizeTool } from './footage';
+import { createDubTool, translateSubtitlesTool } from './languages';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
 export const BUILTIN_TOOLS: AgentTool[] = [
@@ -36,6 +40,11 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   autoReframe,
   blurFaces,
   trackMotion,
+  createMulticam,
+  removeBackgroundTool,
+  stabilizeTool,
+  applyLutTool,
+  cutToBeatTool,
   webSearchTool,
   fetchUrl,
   writeScript,
@@ -58,7 +67,10 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   setYouTubeMetadata,
   designThumbnail,
   renderVideo,
+  findShorts,
   createShortTool,
+  translateSubtitlesTool,
+  createDubTool,
   uploadToYouTube,
 ];
 

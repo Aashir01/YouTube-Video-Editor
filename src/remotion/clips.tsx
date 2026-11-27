@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AbsoluteFill, Html5Audio, Img, OffthreadVideo, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { AudioClip, BlurClip, CaptionsClip, CodeClip, ImageClip, SceneClip, TextClip, VideoClip, VisualClip, Word } from '../shared/schema';
 import { captionWords, duckGain, paginateWords } from '../shared/timeline';
+import { language, translatedWords } from '../shared/subtitles';
 import { channelAt, isAnimated } from '../shared/keyframes';
 import { safeTemplateProps } from '../shared/templates';
 import { fontFamily } from '../shared/fonts';
@@ -120,9 +121,12 @@ export const VideoView: React.FC<{ clip: VideoClip; trackMuted: boolean }> = ({ 
   const z = zoomAt(clip, frame / fps);
   const total = clipFrames(clip, fps).durationInFrames;
   const frameStyle = mediaFrameStyle(clip, z);
+  // footage with its background removed: the renderer keeps the transparency (PNG frames)
+  const transparent = Boolean(studio?.project.assets.find((a) => a.id === clip.assetId)?.meta.alpha);
   return (
     <OffthreadVideo
       src={src}
+      transparent={transparent}
       trimBefore={Math.round(clip.trimStart * fps)}
       playbackRate={clip.speed}
       muted={trackMuted || clip.muted || (clip.volume === 0 && !isAnimated(clip, 'volume'))}
@@ -364,10 +368,12 @@ export const CaptionsView: React.FC<{ clip: CaptionsClip }> = ({ clip }) => {
   const { u, H, W, portrait } = theme;
   const st = clip.style;
   const d = PRESET_DEFAULTS[st.preset] ?? PRESET_DEFAULTS['bold-pop']!;
-  const words = useMemo(
-    () => (studio ? captionWords(studio.project, clip, studio.transcripts) : clip.words),
-    [studio, clip],
-  );
+  const words = useMemo(() => {
+    const spoken = studio ? captionWords(studio.project, clip, studio.transcripts) : clip.words;
+    const table = clip.language ? studio?.translations[clip.language] : undefined;
+    return table ? translatedWords(spoken, table, clip.language) : spoken;
+  }, [studio, clip]);
+  const rtl = Boolean(clip.language && language(clip.language).rtl);
   const pages = useMemo(
     () => paginateWords(words, { maxWords: st.maxWordsPerPage ?? d.words, maxChars: (st.maxWordsPerPage ?? d.words) > d.words ? d.chars * 2 : d.chars }),
     [words, st.maxWordsPerPage, d.words, d.chars],
@@ -460,6 +466,7 @@ export const CaptionsView: React.FC<{ clip: CaptionsClip }> = ({ clip }) => {
     opacity: st.preset === 'clean' || st.preset === 'minimal' ? clamp01(pageIn * 1.5) : 1,
     display: 'flex',
     justifyContent: 'center',
+    direction: rtl ? 'rtl' : undefined,
   };
   const inner: React.CSSProperties =
     st.preset === 'boxed'

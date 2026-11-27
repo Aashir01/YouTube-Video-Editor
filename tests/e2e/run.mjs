@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
-const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'agent', 'keyframes', 'reframe', 'tracking', 'proxies'];
+const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies'];
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const picked = args.filter((a) => !a.startsWith('--'));
@@ -72,7 +72,8 @@ children.push(llm);
 const serverLog = fs.openSync(path.join(out, 'server.log'), 'a');
 const server = spawn(process.execPath, [path.join(root, 'bin', 'director.mjs'), 'start', '--port', String(port), '--no-open'], {
   cwd: root,
-  env: { ...process.env, DIRECTOR_DATA_DIR: data },
+  // OpenAI voices (and any other OpenAI SDK call) go to the scripted model too, never to the real API
+  env: { ...process.env, DIRECTOR_DATA_DIR: data, OPENAI_BASE_URL: `http://127.0.0.1:${llmPort}/v1` },
   stdio: ['ignore', serverLog, serverLog],
 });
 children.push(server);

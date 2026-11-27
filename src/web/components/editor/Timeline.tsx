@@ -21,7 +21,9 @@ import {
   Repeat,
   Rows3,
   Scissors,
+  Music,
   Smartphone,
+  SwitchCamera,
   Trash2,
   Volume2,
   VolumeX,
@@ -32,12 +34,13 @@ import {
 import { KEYFRAME_EASES, TRACK_ACCEPTS, type Clip, type Project, type Track } from '../../../shared/schema';
 import { DEFAULT_EASE, channelKeys, channelsAt, KF_EPS } from '../../../shared/keyframes';
 import { clipEnd, conflictsOnTrack, projectDuration } from '../../../shared/timeline';
+import { timelineBeats } from '../../../shared/beats';
 import { uid } from '../../../shared/ids';
 import type { EditOp } from '../../../shared/ops';
 import { getClipRef, useStudio } from '../../lib/store';
 import { player } from '../../lib/player';
 import { prefs } from '../../lib/prefs';
-import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, makeShort, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead } from '../../lib/actions';
+import { addMarkerAtPlayhead, clearRangeMarks, cutToBeat, deleteSelection, liftRangeMarks, makeShort, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead, switchClipCamera } from '../../lib/actions';
 import { api } from '../../lib/api';
 import { activeDrag, clearDragPayload, DND_TYPE, dropFiles, dropPayload, readDragPayload } from '../../lib/dnd';
 import { cn, clamp, formatClock, formatTimecode, modKey } from '../../lib/utils';
@@ -422,6 +425,14 @@ export const Timeline: React.FC = () => {
     for (const t of tracks) for (const c of t.clips) if (!exclude.includes(c.id)) pts.push(c.start, clipEnd(c));
     for (const m of project.markers) pts.push(m.time);
     for (const ch of project.youtube.chapters) pts.push(ch.time);
+    // the beats of the music
+    for (const t of tracks) {
+      for (const c of t.clips) {
+        if (c.type !== 'audio' || c.role !== 'music') continue;
+        const a = project.assets.find((x) => x.id === c.assetId);
+        if (a?.analysis.beats?.length) pts.push(...timelineBeats(c, a.analysis.beats, a.meta.duration));
+      }
+    }
     return pts;
   };
 
@@ -702,11 +713,40 @@ export const Timeline: React.FC = () => {
         ]
       : null;
 
+  // multicam cuts: show another camera at the same moment
+  const cameraMenuItems = (clip: Clip) => {
+    const group = clip.type === 'video' && clip.multicam ? project.multicam.find((g) => g.id === clip.multicam) : undefined;
+    if (!group || clip.type !== 'video') return [];
+    return [
+      'separator' as const,
+      ...group.angles.map((a, i) => ({
+        label: `Camera ${i + 1}: ${project.assets.find((x) => x.id === a.assetId)?.name ?? a.assetId}${group.wide === i ? ' (wide)' : ''}`,
+        shortcut: String(i + 1),
+        icon: <SwitchCamera />,
+        disabled: a.assetId === clip.assetId,
+        onSelect: () => switchClipCamera(clip.id, i),
+      })),
+      'separator' as const,
+    ];
+  };
+
+  // pictures and b-roll: cut them to the music
+  const beatMenuItems = (clip: Clip) => {
+    if (clip.type === 'audio' || clip.type === 'captions') return [];
+    if (!project.tracks.some((t) => t.clips.some((c) => c.type === 'audio' && c.role === 'music'))) return [];
+    const sel = useStudio.getState().selection;
+    const track = project.tracks.find((t) => t.clips.some((c) => c.id === clip.id));
+    const ids = sel.includes(clip.id) ? sel.filter((id) => track?.clips.some((c) => c.id === id)) : [clip.id];
+    return [{ label: ids.length > 1 ? `Cut ${ids.length} clips to the beat` : 'Cut to the beat', icon: <Music />, onSelect: () => void cutToBeat(ids) }];
+  };
+
   const clipMenuItems = keyframeMenuItems
     ? keyframeMenuItems
     : menuRef
     ? [
         { label: 'Split at playhead', shortcut: 'S', icon: <Scissors />, disabled: !(time() > menuRef.clip.start && time() < clipEnd(menuRef.clip)), onSelect: () => void edit([{ op: 'splitClip', clipId: menuRef.clip.id, at: time() }], 'Split clip') },
+        ...cameraMenuItems(menuRef.clip),
+        ...beatMenuItems(menuRef.clip),
         {
           label: 'Duplicate',
           shortcut: `${modKey}D`,

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Asset, Clip, Project, VideoClip } from '../../../shared/schema';
 import { channelAt, isAnimated, keyframeTimes, KF_EPS } from '../../../shared/keyframes';
 import { formatTime } from '../../../shared/timeline';
+import { timelineBeats } from '../../../shared/beats';
 import { mediaUrl } from '../../lib/api';
 import { clipLabel } from '../../lib/store';
 import { cn, decodePeaks } from '../../lib/utils';
@@ -141,6 +142,14 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
   const fadeIn = clip.type === 'audio' ? clip.fadeIn : clip.type === 'video' ? clip.audioFadeIn : 0;
   const fadeOut = clip.type === 'audio' ? clip.fadeOut : clip.type === 'video' ? clip.audioFadeOut : 0;
   const pps = width / clip.duration;
+  // music: its beats along the top (when they are far enough apart to read)
+  const beatList = clip.type === 'audio' && clip.role === 'music' ? asset?.analysis.beats : undefined;
+  const beats = useMemo(() => {
+    if (clip.type !== 'audio' || !beatList?.length) return [];
+    const local = timelineBeats(clip, beatList, asset?.meta.duration).map((t) => Math.round((t - clip.start) * 1000) / 1000);
+    const spacing = local.length > 1 ? ((local[local.length - 1]! - local[0]!) / (local.length - 1)) * pps : 0;
+    return spacing >= 4 ? local : [];
+  }, [clip, beatList, asset?.meta.duration, pps]);
   const envelope = hasAudio && !short && width > 30;
   const vy = volumeY(volume, h);
   const fi = Math.min(width / 2, fadeIn * pps);
@@ -232,6 +241,13 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
             onPointerDown={(e) => onPointerDown(e, clip, 'fade-out')}
           />
         </>
+      )}
+      {beats.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-2" data-beats={beats.length}>
+          {beats.map((t) => (
+            <div key={t} className="absolute top-0 h-1.5 w-px bg-white/55" style={{ left: t * pps }} />
+          ))}
+        </div>
       )}
       {kts.length > 0 && width > 14 && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-3">

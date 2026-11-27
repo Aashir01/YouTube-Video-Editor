@@ -83,6 +83,10 @@ export interface UploadOptions {
   videoFile: string;
   thumbnailFile?: string;
   captionsFile?: string;
+  /** more subtitle tracks, one per language */
+  subtitles?: { language: string; name: string; file: string }[];
+  /** the title and description in other languages */
+  localizations?: Record<string, { title: string; description: string }>;
   privacy: 'private' | 'unlisted' | 'public';
   publishAt?: string;
   onProgress?: (p: number) => void;
@@ -95,20 +99,33 @@ const descriptionWithChapters = (p: Project): string => {
   return `${d}\n\nChapters:\n${p.youtube.chapters.map((c) => `${fmt(c.time)} ${c.title}`).join('\n')}`;
 };
 
+/** The videos.insert body: snippet, status and (when there are any) the title and description in other languages. */
+export const videoMetadata = (project: Project, opts: Pick<UploadOptions, 'privacy' | 'publishAt' | 'localizations'>) => {
+  const hashtags = project.youtube.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ');
+  const localizations = Object.fromEntries(
+    Object.entries(opts.localizations ?? {}).map(([lang, l]) => [lang, { title: l.title.slice(0, 100), description: [l.description, hashtags].filter(Boolean).join('\n\n').slice(0, 5000) }]),
+  );
+  const localized = Object.keys(localizations).length > 0;
+  return {
+    snippet: {
+      title: (project.youtube.title || project.name).slice(0, 100),
+      description: [descriptionWithChapters(project), hashtags].filter(Boolean).join('\n\n').slice(0, 5000),
+      tags: project.youtube.tags.slice(0, 30),
+      categoryId: project.youtube.category || '27',
+      // YouTube needs the original language to accept localizations
+      defaultLanguage: project.brief.language || (localized ? 'en' : undefined),
+    },
+    status: { privacyStatus: opts.publishAt ? 'private' : opts.privacy, selfDeclaredMadeForKids: project.youtube.madeForKids, ...(opts.publishAt ? { publishAt: opts.publishAt } : {}) },
+    ...(localized ? { localizations } : {}),
+  };
+};
+
 export const uploadVideo = async (project: Project, opts: UploadOptions): Promise<{ videoId: string; url: string; warnings: string[] }> => {
   const token = await accessToken();
   const size = (await fsp.stat(opts.videoFile)).size;
-  const meta = {
-    snippet: {
-      title: (project.youtube.title || project.name).slice(0, 100),
-      description: [descriptionWithChapters(project), project.youtube.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')].filter(Boolean).join('\n\n').slice(0, 5000),
-      tags: project.youtube.tags.slice(0, 30),
-      categoryId: project.youtube.category || '27',
-      defaultLanguage: project.brief.language,
-    },
-    status: { privacyStatus: opts.publishAt ? 'private' : opts.privacy, selfDeclaredMadeForKids: project.youtube.madeForKids, ...(opts.publishAt ? { publishAt: opts.publishAt } : {}) },
-  };
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+  const meta = videoMetadata(project, opts);
+  const parts = `snippet,status${'localizations' in meta ? ',localizations' : ''}`;
+  const init = await fetch(`https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=${parts}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Length': String(size), 'X-Upload-Content-Type': 'video/mp4' },
     body: JSON.stringify(meta),
@@ -136,17 +153,18 @@ export const uploadVideo = async (project: Project, opts: UploadOptions): Promis
     const t = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${video.id}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' }, body: img });
     if (!t.ok) warnings.push(`Thumbnail not set (${t.status}) — custom thumbnails require a verified YouTube account.`);
   }
-  if (opts.captionsFile) {
+  const tracks = [...(opts.captionsFile ? [{ language: project.brief.language || 'en', name: 'Captions', file: opts.captionsFile }] : []), ...(opts.subtitles ?? [])];
+  for (const track of tracks) {
     const boundary = `director${Date.now()}`;
-    const srt = await fsp.readFile(opts.captionsFile);
-    const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId: video.id, language: project.brief.language || 'en', name: 'Captions', isDraft: false } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
+    const srt = await fsp.readFile(track.file);
+    const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId: video.id, language: track.language, name: track.name, isDraft: false } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
     const tail = Buffer.from(`\r\n--${boundary}--`);
     const c = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?uploadType=multipart&part=snippet', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
       body: Buffer.concat([head, srt, tail]),
     });
-    if (!c.ok) warnings.push(`Captions not uploaded (${c.status}).`);
+    if (!c.ok) warnings.push(`${track.name} subtitles (${track.language}) not uploaded (${c.status}).`);
   }
   return { videoId: video.id, url: `https://youtu.be/${video.id}`, warnings };
 };

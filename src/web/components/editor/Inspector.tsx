@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Plus, ScanFace, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Music, Plus, ScanFace, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import {
   CAPTION_PRESETS,
   EASINGS,
@@ -17,17 +17,18 @@ import {
   type VideoClip,
 } from '../../../shared/schema';
 import { templateCatalog } from '../../../shared/templates';
+import { language } from '../../../shared/subtitles';
 import { FONTS } from '../../../shared/fonts';
 import { clipEnd } from '../../../shared/timeline';
-import { api, type TemplateInfo } from '../../lib/api';
+import { api, mediaUrl, type TemplateInfo } from '../../lib/api';
 import { clipLabel, getClipRef, useStudio } from '../../lib/store';
-import { duplicateSelection, enhanceSpeech, splitAtPlayhead } from '../../lib/actions';
+import { duplicateSelection, enhanceSpeech, splitAtPlayhead, switchClipCamera } from '../../lib/actions';
 import { cn, errorText } from '../../lib/utils';
 import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
 import { SchemaForm } from './SchemaForm';
 import { AnimationSection, useAnim } from './Keyframes';
-import { BlurEditor, BlurFacesButton, MotionTracking } from './Tracking';
+import { BackgroundSection, BlurEditor, BlurFacesButton, FootageSection, MotionTracking } from './Tracking';
 
 const FONT_OPTIONS = FONTS.map((f) => ({ value: f.id, label: f.family.replace(' Variable', '') }));
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace(/-/g, ' ') }));
@@ -288,6 +289,40 @@ const Motion: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip,
 // Type editors
 // ---------------------------------------------------------------------------
 
+/** Multicam cut: which camera it shows (click another to switch at the same moment). */
+const MulticamSection: React.FC<{ clip: VideoClip }> = ({ clip }) => {
+  const project = useStudio((s) => s.project!);
+  const group = project.multicam.find((g) => g.id === clip.multicam);
+  if (!group) return null;
+  const current = group.angles.findIndex((a) => a.assetId === clip.assetId);
+  return (
+    <Section title="Multicam">
+      <div className="grid grid-cols-3 gap-1.5">
+        {group.angles.map((a, i) => {
+          const asset = project.assets.find((x) => x.id === a.assetId);
+          return (
+            <button
+              key={a.assetId}
+              aria-pressed={i === current}
+              aria-label={`Camera ${i + 1}`}
+              title={asset?.name}
+              onClick={() => i !== current && switchClipCamera(clip.id, i)}
+              className={cn('flex flex-col items-center gap-1 rounded-lg border p-1 transition-colors', i === current ? 'border-accent bg-accent/10' : 'border-line hover:border-line-2')}
+            >
+              {asset?.thumb ? <img src={mediaUrl(project.id, asset.thumb)} className="aspect-video w-full rounded object-cover" alt="" /> : <div className="aspect-video w-full rounded bg-black/30" />}
+              <span className="text-[10px] font-semibold">
+                {i + 1}
+                {group.wide === i ? ' · wide' : ''}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] leading-relaxed text-dim">Press 1–9 to cut to a camera at the playhead.</p>
+    </Section>
+  );
+};
+
 const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch }) => {
   const projectId = useStudio((s) => s.projectId)!;
   const A = useAnim(clip, patch);
@@ -372,7 +407,38 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
       </button>
     )}
     <Switch label="Loop to fill the clip" checked={clip.loop} onChange={(v) => patch({ loop: v })} />
+    {clip.role === 'music' && <BeatsRow assetId={clip.assetId} />}
   </Section>
+  );
+};
+
+/** Music: its tempo and beats (shown on the timeline, snapped to, and used by "Cut to the beat"). */
+const BeatsRow: React.FC<{ assetId: string }> = ({ assetId }) => {
+  const project = useStudio((s) => s.project!);
+  const a = project.assets.find((x) => x.id === assetId);
+  const [busy, setBusy] = useState(false);
+  if (a?.analysis.beats?.length) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-muted">
+        <Music className="size-3.5 text-hue-green" /> {Math.round(a.analysis.tempo ?? 0)} BPM · {a.analysis.beats.length} beats: clips snap to them; select b-roll and right-click → Cut to the beat
+      </div>
+    );
+  }
+  return (
+    <button
+      className="btn btn-sm"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        api
+          .findBeats(project.id, assetId)
+          .then((r) => toast.success(`${Math.round(r.tempo)} BPM, ${r.beats} beats`))
+          .catch((e) => toast.error(errorText(e)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <Music className="size-3.5" /> {busy ? 'Listening…' : 'Find the beats'}
+    </button>
   );
 };
 
@@ -510,9 +576,17 @@ const CodeEditor: React.FC<{ clip: CodeClip; patch: Patch }> = ({ clip, patch })
 const CaptionsEditor: React.FC<{ clip: CaptionsClip; patch: Patch }> = ({ clip, patch }) => {
   const st = clip.style;
   const style = (p: Record<string, unknown>) => patch({ style: p });
+  const languages = useStudio((s) => s.translations?.languages ?? []);
   return (
     <>
       <Section title="Captions">
+        <Field label="Language" hint={languages.length ? undefined : 'Add subtitle languages in Export → Languages'}>
+          <SelectField
+            value={clip.language ?? ''}
+            onChange={(v) => patch({ language: v || null })}
+            options={[{ value: '', label: 'Spoken language' }, ...[...new Set([...languages, ...(clip.language ? [clip.language] : [])])].map((code) => ({ value: code, label: `${language(code).name} (translated)` }))]}
+          />
+        </Field>
         <Field label="Source">
           <Segmented
             size="sm"
@@ -649,7 +723,10 @@ export const Inspector: React.FC = () => {
       </div>
       <div className={cn('min-h-0 flex-1 overflow-y-auto', track.locked && 'pointer-events-none opacity-60')}>
         <Timing clip={clip} patch={patch} />
+        {clip.type === 'video' && clip.multicam && <MulticamSection clip={clip} />}
         {clip.type === 'video' && <VideoEditor clip={clip} patch={patch} />}
+        {clip.type === 'video' && <BackgroundSection clip={clip} />}
+        {clip.type === 'video' && <FootageSection clip={clip} />}
         {clip.type === 'image' && <ImageEditor clip={clip} patch={patch} />}
         {clip.type === 'audio' && <AudioEditor clip={clip} patch={patch} />}
         {clip.type === 'text' && <TextEditor clip={clip} patch={patch} />}

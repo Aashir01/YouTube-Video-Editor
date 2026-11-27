@@ -62,6 +62,20 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 - **Enhance speech** in one click: rumble and hiss removal, denoise, compression and loudness leveling, without re-encoding the video.
 - **Command palette** (`Ctrl/⌘+K`): run any command, jump to a time (`1:23`), find a clip by its text, or ask the Director. `?` lists every shortcut. There's also an undo-history menu, a save indicator and `/` quick briefs in the chat.
 - **Long video → Shorts.** Mark a range or select words in the transcript, then click **Make a Short**. You get a new 9:16 project with the footage reframed on the speaker's face, graphics kept in sync, music trimmed to length and captions added. The Director can do the same.
+- **Find Shorts.** The **Shorts** tab has your AI read the transcript and pick the moments that work on their own: each opens on a hook and ends on a payoff, with a title, a score and why it works. Play one with a click, then make it a vertical, captioned Short with another (or make them all). The list notices when you edit the video afterwards.
+- **Multi-camera podcasts.** Pick the cameras of one recording (and any separate mics): they are lined up by their sound, then the edit cuts like a live director:
+  - the close-up of whoever is talking (by one mic per person, or by watching mouths);
+  - the wide shot when people talk over each other, plus the odd cutaway in long monologues;
+  - never a camera that wasn't recording.
+
+  Switch any cut to another camera from its menu or the Inspector, or press **1–9** during playback to cut live.
+- **Subtitles in other languages.** In **Export → Languages**, your AI translates the captions (and the YouTube title and description) sentence by sentence. They stay in sync when you edit, since only new sentences get translated again.
+  - Download an SRT per language, or show a language in the captions.
+  - Renders write every language, and the YouTube upload adds them as caption tracks with the translated title.
+  - A **dubbed version** is a new project with each line voiced where it was said.
+- **Remove the background** of a person without a green screen (a local segmentation model), or key out a green or blue screen. What is on the track below shows through, or a blurred copy of the original for "portrait mode". **Restore the original** any time.
+- **Fix and look:** **Stabilize** shaky footage (light to strong), and apply a color look from your own **.cube LUT** at any strength.
+- **Cut to the beat.** The beats of your music show on the timeline and clips snap to them. Select b-roll or pictures, right-click, and **Cut to the beat** re-times them so every cut lands on a beat.
 - Frame-accurate preview (Remotion Player) with playback speed, zoom, safe-zone, thirds and center guides, and in/out looping.
 - Inspector for every clip type: placement and picture-in-picture, color grading, Ken Burns, punch-in zooms, transitions, text styling, captions styling, and auto-generated forms for template props. Your brand colors are one click away in every color field.
 - **28 motion-graphics templates** that use your brand colors and fonts, **8 caption styles**, and **12 built-in sound effects** with 2 music beds, all generated locally.
@@ -74,9 +88,9 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 | Layer | Tech |
 |---|---|
 | Composition & rendering | [Remotion](https://www.remotion.dev) 4 (React → video), FFmpeg, keyframe animation |
-| Vision | Local face detection with landmarks (YuNet on ONNX Runtime), talking detection and template-matching object tracking, for smart reframing, motion tracking and face blur |
+| Vision & audio | Local face detection with landmarks (YuNet) and person segmentation (MediaPipe) on ONNX Runtime, talking detection and template-matching object tracking; sync by sound (FFT cross-correlation) and beat tracking, all in-process |
 | Server | Node 20+, Hono, Server-Sent Events, Zod-validated project document |
-| Agent | Custom tool-calling loop (Claude-Code-style): 45 tools, skills, sub-agents, context compaction |
+| Agent | Custom tool-calling loop (Claude-Code-style): 53 tools, skills, sub-agents, context compaction |
 | LLM adapters | Native Anthropic, OpenAI-compatible and Gemini adapters (streaming, tool calls, vision) |
 | UI | React 19, Vite, Tailwind CSS 4, Zustand, Radix |
 | Integrations | MCP server (Streamable HTTP + stdio), MCP client, YouTube Data API |
@@ -216,7 +230,7 @@ You can drag media, templates and sounds from the left panel (or files from your
 
 ## Use it from Claude Code, Claude Desktop or Cursor (MCP)
 
-Cutroom is an MCP server with **46 tools**: the Director's 42 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
+Cutroom is an MCP server with **54 tools**: the Director's 50 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
 
 **Claude Code** (while the studio is running):
 
@@ -324,10 +338,11 @@ bin/director.mjs        CLI
 src/shared/             project schema, timeline operations, templates catalog (used by server, UI and renderer)
 src/remotion/           the video composition: clips, effects, 28 templates, captions, code scenes, thumbnails
 src/server/             HTTP API, storage, media pipeline, rendering, services, agent, MCP
-src/server/agent/       Director loop, prompts, skills (Markdown), 45 tools
+src/server/agent/       Director loop, prompts, skills (Markdown), 53 tools
 src/web/                the editor UI
-assets/models/          bundled ONNX models (face detection for smart reframe, tracking and face blur)
+assets/models/          bundled ONNX models (face detection; person segmentation for background removal)
 tests/e2e/              browser test suites, fixtures and runner
+scripts/                one-off tools (converting the segmentation model to ONNX)
 docs/ARCHITECTURE.md    how it all fits together
 ```
 
