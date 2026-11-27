@@ -26,6 +26,29 @@ export const splitAtPlayhead = () => {
   );
 };
 
+/** Multicam: show camera `angle` from the playhead on, cutting there first (keys 1–9). Returns false when no camera cut is under the playhead. */
+export const cutToCamera = (angle: number): boolean => {
+  const { project, time, edit } = useStudio.getState();
+  if (!project?.multicam.length) return false;
+  const under = project.tracks
+    .filter((t) => t.kind === 'video' && !t.locked && !t.hidden)
+    .flatMap((t) => t.clips)
+    .find((c) => c.type === 'video' && c.multicam && time >= c.start - 1e-6 && time < clipEnd(c) - 1e-6);
+  if (!under || under.type !== 'video') return false;
+  const group = project.multicam.find((g) => g.id === under.multicam);
+  if (!group) return false;
+  if (angle >= group.angles.length) {
+    toast(`This multicam has ${group.angles.length} camera${group.angles.length === 1 ? '' : 's'}`);
+    return true;
+  }
+  if (group.angles[angle]!.assetId === under.assetId) return true;
+  void edit([{ op: 'switchAngle', clipId: under.id, angle, at: time }], `Camera ${angle + 1}`);
+  return true;
+};
+
+/** Multicam: show another camera in a whole cut. */
+export const switchClipCamera = (clipId: string, angle: number) => void useStudio.getState().edit([{ op: 'switchAngle', clipId, angle }], `Camera ${angle + 1}`);
+
 export const deleteSelection = (ripple = false) => {
   const { selection, edit } = useStudio.getState();
   if (selection.length === 0) return;

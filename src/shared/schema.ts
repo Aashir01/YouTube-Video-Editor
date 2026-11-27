@@ -177,6 +177,7 @@ export const VideoClipSchema = z.object({
   kenBurns: KenBurnsSchema.optional(),
   audioFadeIn: z.number().min(0).default(0),
   audioFadeOut: z.number().min(0).default(0),
+  multicam: Id.optional().describe('The multicam group this camera cut belongs to (switch cameras with the switchAngle op)'),
 });
 
 export const ImageClipSchema = z.object({
@@ -534,6 +535,25 @@ export const AudioMixSchema = z.object({
   loudnessTarget: z.number().min(-30).max(-8).default(-14).describe('Integrated LUFS target'),
 });
 
+/** A camera or microphone of a multicam recording, placed on the shared clock. */
+export const MulticamSourceSchema = z.object({
+  assetId: Id,
+  /** clock time (s) at which this file starts: its time s plays at offset + s */
+  offset: z.number(),
+  /** how sure the sync by sound was (z-score; the first camera is the reference) */
+  confidence: z.number().optional(),
+});
+
+/** Several cameras (and microphones) recording the same scene, lined up by their sound. */
+export const MulticamGroupSchema = z.object({
+  id: Id,
+  name: z.string().max(80).default('Multicam'),
+  angles: z.array(MulticamSourceSchema).min(1).max(9),
+  audio: z.array(MulticamSourceSchema).max(8).default([]),
+  /** the camera that shows everyone, if any (index into angles) */
+  wide: z.number().int().min(0).optional(),
+});
+
 export const ProjectSchema = z.object({
   schemaVersion: z.number().default(SCHEMA_VERSION),
   id: Id,
@@ -550,6 +570,7 @@ export const ProjectSchema = z.object({
   markers: z.array(MarkerSchema).default([]),
   renders: z.array(RenderRecordSchema).default([]),
   audio: AudioMixSchema.default(AudioMixSchema.parse({})),
+  multicam: z.array(MulticamGroupSchema).default([]),
 });
 
 // ---------------------------------------------------------------------------
@@ -563,6 +584,8 @@ export type KenBurns = z.infer<typeof KenBurnsSchema>;
 export type Zoom = z.infer<typeof ZoomSchema>;
 export type ColorGrade = z.infer<typeof ColorGradeSchema>;
 export type Word = z.infer<typeof WordSchema>;
+export type MulticamGroup = z.infer<typeof MulticamGroupSchema>;
+export type MulticamSource = z.infer<typeof MulticamSourceSchema>;
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 export type KeyframeEase = (typeof KEYFRAME_EASES)[number];
 export type Keyframes = z.infer<typeof KeyframesSchema>;

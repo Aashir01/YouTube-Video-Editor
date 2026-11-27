@@ -22,6 +22,7 @@ import {
   Rows3,
   Scissors,
   Smartphone,
+  SwitchCamera,
   Trash2,
   Volume2,
   VolumeX,
@@ -37,7 +38,7 @@ import type { EditOp } from '../../../shared/ops';
 import { getClipRef, useStudio } from '../../lib/store';
 import { player } from '../../lib/player';
 import { prefs } from '../../lib/prefs';
-import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, makeShort, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead } from '../../lib/actions';
+import { addMarkerAtPlayhead, clearRangeMarks, deleteSelection, liftRangeMarks, makeShort, pasteAtPlayhead, rippleDeleteRange, selectForward, splitAtPlayhead, switchClipCamera } from '../../lib/actions';
 import { api } from '../../lib/api';
 import { activeDrag, clearDragPayload, DND_TYPE, dropFiles, dropPayload, readDragPayload } from '../../lib/dnd';
 import { cn, clamp, formatClock, formatTimecode, modKey } from '../../lib/utils';
@@ -702,11 +703,29 @@ export const Timeline: React.FC = () => {
         ]
       : null;
 
+  // multicam cuts: show another camera at the same moment
+  const cameraMenuItems = (clip: Clip) => {
+    const group = clip.type === 'video' && clip.multicam ? project.multicam.find((g) => g.id === clip.multicam) : undefined;
+    if (!group || clip.type !== 'video') return [];
+    return [
+      'separator' as const,
+      ...group.angles.map((a, i) => ({
+        label: `Camera ${i + 1}: ${project.assets.find((x) => x.id === a.assetId)?.name ?? a.assetId}${group.wide === i ? ' (wide)' : ''}`,
+        shortcut: String(i + 1),
+        icon: <SwitchCamera />,
+        disabled: a.assetId === clip.assetId,
+        onSelect: () => switchClipCamera(clip.id, i),
+      })),
+      'separator' as const,
+    ];
+  };
+
   const clipMenuItems = keyframeMenuItems
     ? keyframeMenuItems
     : menuRef
     ? [
         { label: 'Split at playhead', shortcut: 'S', icon: <Scissors />, disabled: !(time() > menuRef.clip.start && time() < clipEnd(menuRef.clip)), onSelect: () => void edit([{ op: 'splitClip', clipId: menuRef.clip.id, at: time() }], 'Split clip') },
+        ...cameraMenuItems(menuRef.clip),
         {
           label: 'Duplicate',
           shortcut: `${modKey}D`,
