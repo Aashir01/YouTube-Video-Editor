@@ -47,6 +47,7 @@ export const ANIMATABLE: Record<ClipType, readonly Channel[]> = {
   scene: [],
   code: [],
   captions: [],
+  blur: ['box.x', 'box.y', 'box.w', 'box.h', 'opacity'],
 };
 
 export const isChannelOf = (type: ClipType, ch: string): ch is Channel => (ANIMATABLE[type] as readonly string[]).includes(ch);

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Html5Audio, Img, OffthreadVideo, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import type { AudioClip, CaptionsClip, CodeClip, ImageClip, SceneClip, TextClip, VideoClip, VisualClip, Word } from '../shared/schema';
+import type { AudioClip, BlurClip, CaptionsClip, CodeClip, ImageClip, SceneClip, TextClip, VideoClip, VisualClip, Word } from '../shared/schema';
 import { captionWords, duckGain, paginateWords } from '../shared/timeline';
 import { channelAt, isAnimated } from '../shared/keyframes';
 import { safeTemplateProps } from '../shared/templates';
@@ -59,6 +59,43 @@ export const VisualFrame: React.FC<{ clip: VisualClip; children: React.ReactNode
         <GradeOverlays vignette={grade.vignette} tint={'tint' in grade ? grade.tint : undefined} blend={'blend' in grade ? grade.blend : undefined} />
       </div>
       {tr.flash > 0 ? <AbsoluteFill style={{ backgroundColor: '#FFFFFF', opacity: tr.flash }} /> : null}
+    </AbsoluteFill>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Blur box: hides whatever is beneath it (faces, plates, screens)
+// ---------------------------------------------------------------------------
+
+export const BlurView: React.FC<{ clip: BlurClip }> = ({ clip }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { W, H, u } = useTheme();
+  const { durationInFrames } = clipFrames(clip, fps);
+  const tr = transitionStyle(clip.transitionIn, clip.transitionOut, frame, durationInFrames, fps, u);
+  const b = clip.box;
+  const blur = `blur(${clip.strength * u}px)`;
+  // an ellipse fades out towards its rim so the blur has no hard edge
+  const mask = clip.shape === 'ellipse' ? 'radial-gradient(closest-side, #000 80%, transparent 100%)' : undefined;
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      <div
+        data-clip-box={clip.id}
+        data-clip-kind="box"
+        style={{
+          position: 'absolute',
+          left: b.x * W,
+          top: b.y * H,
+          width: b.w * W,
+          height: b.h * H,
+          borderRadius: clip.shape === 'ellipse' ? '50%' : 10 * u,
+          backdropFilter: blur,
+          WebkitBackdropFilter: blur,
+          maskImage: mask,
+          WebkitMaskImage: mask,
+          opacity: clip.opacity * (tr.style.opacity === undefined ? 1 : Number(tr.style.opacity)),
+        }}
+      />
     </AbsoluteFill>
   );
 };

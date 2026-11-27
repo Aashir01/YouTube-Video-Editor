@@ -308,6 +308,15 @@ export const CaptionsClipSchema = z.object({
   style: CaptionStyleSchema.default(CaptionStyleSchema.parse({})),
 });
 
+export const BlurClipSchema = z.object({
+  ...clipBase,
+  type: z.literal('blur'),
+  box: BoxSchema.describe('Area to blur, in canvas fractions'),
+  shape: z.enum(['ellipse', 'rect']).default('ellipse'),
+  strength: z.number().min(1).max(200).default(28).describe('Blur radius in design px'),
+  opacity: z.number().min(0).max(1).default(1),
+});
+
 export const ClipSchema = z.discriminatedUnion('type', [
   VideoClipSchema,
   ImageClipSchema,
@@ -316,6 +325,7 @@ export const ClipSchema = z.discriminatedUnion('type', [
   SceneClipSchema,
   CodeClipSchema,
   CaptionsClipSchema,
+  BlurClipSchema,
 ]);
 
 export const TRACK_KINDS = ['video', 'overlay', 'audio', 'captions'] as const;
@@ -564,6 +574,7 @@ export type SceneClip = z.infer<typeof SceneClipSchema>;
 export type CodeClip = z.infer<typeof CodeClipSchema>;
 export type CaptionStyle = z.infer<typeof CaptionStyleSchema>;
 export type CaptionsClip = z.infer<typeof CaptionsClipSchema>;
+export type BlurClip = z.infer<typeof BlurClipSchema>;
 export type Clip = z.infer<typeof ClipSchema>;
 export type ClipType = Clip['type'];
 export type ClipInput = z.input<typeof ClipSchema>;
@@ -594,8 +605,8 @@ export const isMediaClip = (c: Clip): c is MediaClip => c.type === 'video' || c.
 
 /** Which clip types a track kind can hold. */
 export const TRACK_ACCEPTS: Record<TrackKind, ClipType[]> = {
-  video: ['video', 'image', 'scene', 'code', 'text'],
-  overlay: ['video', 'image', 'scene', 'code', 'text'],
+  video: ['video', 'image', 'scene', 'code', 'text', 'blur'],
+  overlay: ['video', 'image', 'scene', 'code', 'text', 'blur'],
   audio: ['audio'],
   captions: ['captions'],
 };

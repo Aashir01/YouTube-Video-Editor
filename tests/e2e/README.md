@@ -3,7 +3,7 @@
 Browser tests that use Cutroom like a person does: clicking, dragging, typing and exporting in a real Chromium, against a real server.
 
 ```bash
-npm run test:e2e                       # every suite (about 4 minutes)
+npm run test:e2e                       # every suite (about 5 minutes)
 npm run test:e2e -- canvas keyframes   # only some suites
 npm run test:e2e -- --keep             # keep the temporary data folder afterwards
 ```
@@ -28,7 +28,8 @@ npm run test:e2e -- --keep             # keep the temporary data folder afterwar
 | `shorts` | Make a Short from ranges (API and UI), audio-only and in–out exports, home recipes |
 | `agent` | A full Director session: plan, question card, edits, editor context, one-step undo |
 | `keyframes` | Keyframe buttons, auto-keying from fields and canvas drags, timeline diamonds, easing, presets, agent ops, rendered motion |
-| `reframe` | Smart reframe on moving and cutting faces, re-checked on rendered frames; Track faces; Make a Short |
+| `reframe` | Smart reframe on moving and cutting faces and on a two-person conversation, re-checked on rendered frames; Track faces; Make a Short |
+| `tracking` | Blur faces (re-checked with the face detector on renders), a label following a face, a blur box tracking what is under it, the Blur box card |
 
 **Writing a suite:** use the helpers in `lib.cjs`:
 - `api`, `post`, `ops`, `upload` and `waitReady` for the REST API;
