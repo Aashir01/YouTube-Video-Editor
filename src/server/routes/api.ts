@@ -13,7 +13,7 @@ import { APP_ROOT, DATA_DIR, getSavedSettings, getSettings, maskedSettings, merg
 import { bus } from '../events';
 import { store } from '../storage/projects';
 import { serveFile, receiveUploads } from '../http/files';
-import { attachSubtitles, analyzeAsset, downloadToProject, ensureFilmstrip, queueTranscription, registerAsset } from '../media/ingest';
+import { attachSubtitles, analyzeAsset, downloadToProject, ensureFilmstrip, ensureProxy, queueTranscription, registerAsset, removeProxy } from '../media/ingest';
 import { ffInfo } from '../media/ffmpeg';
 import { libraryFile, listLibrary } from '../media/sfx';
 import { cancelRender, renderFrames, renderThumbnail, startRender, RENDER_PRESETS, type RenderPreset } from '../render/render';
@@ -284,6 +284,17 @@ api.post('/projects/:id/assets/:assetId/attach-subtitles', async (c) => {
 
 api.post('/projects/:id/assets/:assetId/filmstrip', async (c) => {
   await ensureFilmstrip(c.req.param('id'), c.req.param('assetId'));
+  return c.json({ ok: true });
+});
+
+// editing proxy: created in the background (progress arrives as a job); DELETE plays the original again
+api.post('/projects/:id/assets/:assetId/proxy', (c) => {
+  void ensureProxy(c.req.param('id'), c.req.param('assetId')).catch((err) => console.warn('[proxy]', (err as Error).message));
+  return c.json({ ok: true });
+});
+
+api.delete('/projects/:id/assets/:assetId/proxy', async (c) => {
+  await removeProxy(c.req.param('id'), c.req.param('assetId'));
   return c.json({ ok: true });
 });
 

@@ -150,6 +150,8 @@ export const api = {
   thumbnail: (id: string) => send<{ url: string }>('POST', `/api/projects/${id}/thumbnail`),
   frames: (id: string, times: number[]) => send<{ frames: { time: number; url: string }[]; errors: string[] }>('POST', `/api/projects/${id}/frames`, { times }),
   analyze: (id: string, assetId: string) => send('POST', `/api/projects/${id}/assets/${assetId}/analyze`),
+  createProxy: (id: string, assetId: string) => send<{ ok: boolean }>('POST', `/api/projects/${id}/assets/${assetId}/proxy`),
+  removeProxy: (id: string, assetId: string) => send<{ ok: boolean }>('DELETE', `/api/projects/${id}/assets/${assetId}/proxy`),
   filmstrip: (id: string, assetId: string) => send('POST', `/api/projects/${id}/assets/${assetId}/filmstrip`),
 
   /** Run an agent tool from an editor button (voiceover, stock import, auto-cut, captions…). */

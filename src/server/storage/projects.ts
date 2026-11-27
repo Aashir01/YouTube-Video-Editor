@@ -271,7 +271,7 @@ export class ProjectStore {
     draft.assets = draft.assets.filter((a) => used.has(a.id));
     const copy = await this.create({ name }, draft);
     for (const a of draft.assets) {
-      const files = [a.file, a.thumb, a.waveform, a.filmstrip?.file, a.text?.file, this.transcriptFile(a.id)].filter((f): f is string => Boolean(f));
+      const files = [a.file, a.thumb, a.waveform, a.filmstrip?.file, a.proxy?.file, a.text?.file, this.transcriptFile(a.id)].filter((f): f is string => Boolean(f));
       for (const f of files) {
         const from = this.mediaPath(id, f);
         const to = this.mediaPath(copy.id, f);

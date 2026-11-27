@@ -30,6 +30,7 @@ npm run test:e2e -- --keep             # keep the temporary data folder afterwar
 | `keyframes` | Keyframe buttons, auto-keying from fields and canvas drags, timeline diamonds, easing, presets, agent ops, rendered motion |
 | `reframe` | Smart reframe on moving and cutting faces and on a two-person conversation, re-checked on rendered frames; Track faces; Make a Short |
 | `tracking` | Blur faces (re-checked with the face detector on renders), a label following a face, a blur box tracking what is under it, the Blur box card |
+| `proxies` | Automatic proxies for 1440p and HEVC footage, playback through them, switching to originals, removing and re-creating, the "off" setting |
 
 **Writing a suite:** use the helpers in `lib.cjs`:
 - `api`, `post`, `ops`, `upload` and `waitReady` for the REST API;

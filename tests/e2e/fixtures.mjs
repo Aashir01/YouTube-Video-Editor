@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURES_VERSION = 2;
+const FIXTURES_VERSION = 3;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(process.argv[2] ?? path.join(here, '.fixtures'));
 const portrait = path.join(here, 'fixtures', 'portrait.jpg');
@@ -43,6 +43,11 @@ run('two-speakers.mp4', [
   '-filter_complex', `[1]scale=540:540,split[a][b];[0][a]overlay=x=60:y=270:shortest=1[l];[l][b]overlay=x=1320:y=270:shortest=1,${mouth(267, 'lt(t\\,4)+gte(t\\,8)')},${mouth(1527, 'between(t\\,4\\,8)')}[v]`,
   '-map', '[v]', '-map', '2:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-t', '12',
 ]);
+
+// heavy footage for the proxy tests: 1440p H.264, and HEVC when this FFmpeg can encode it (iPhone-style)
+run('big.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=2560x1440:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);
+const hevc = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=1920x1080:r=30:d=3', '-c:v', 'libx265', '-preset', 'ultrafast', '-tag:v', 'hvc1', '-pix_fmt', 'yuv420p', path.join(out, 'hevc.mp4')], { stdio: 'ignore' });
+if (hevc.status !== 0) fs.rmSync(path.join(out, 'hevc.mp4'), { force: true });
 
 fs.writeFileSync(stamp, '');
 console.log(`Test fixtures ready in ${out}`);
