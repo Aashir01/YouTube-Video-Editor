@@ -275,10 +275,11 @@ export const addCaptions = defineTool({
   name: 'add_captions',
   category: 'edit',
   description:
-    'Add (or restyle) captions covering the whole video on the Captions track. Auto mode derives words live from the transcripts of footage and voiceover clips, so captions stay in sync after any edit. Presets: bold-pop, highlight-box, karaoke, clean, boxed, neon, typewriter, minimal. Load the captions-audio skill for guidance.',
+    'Add (or restyle) captions covering the whole video on the Captions track. Auto mode derives words live from the transcripts of footage and voiceover clips, so captions stay in sync after any edit. Presets: bold-pop, highlight-box, karaoke, clean, boxed, neon, typewriter, minimal. `language` shows them translated (translate_subtitles first). Load the captions-audio skill for guidance.',
   schema: z.object({
     style: CaptionStyleSchema.partial().default({}),
     trackIds: z.array(z.string()).optional().describe('Only caption speech from these tracks (default: all)'),
+    language: z.string().optional().describe('Show the captions in a translated language (a code passed to translate_subtitles, e.g. "es"); "" = the spoken language'),
   }),
   execute: async (input, ctx) => {
     let words = 0;
@@ -288,7 +289,8 @@ export const addCaptions = defineTool({
       const dur = Math.max(1, projectDuration(d));
       const style = { ...(existing && existing.type === 'captions' ? existing.style : {}), ...input.style };
       track.clips = track.clips.filter((c) => c.type !== 'captions');
-      applyOps(d, [{ op: 'addClip', trackId: track.id, clip: { id: existing?.id ?? '', type: 'captions', mode: 'auto', start: 0, duration: dur, style, sourceTrackIds: resolveTrackIds(d, input.trackIds) } }]);
+      const lang = input.language === undefined ? (existing?.type === 'captions' ? existing.language : undefined) : input.language || undefined;
+      applyOps(d, [{ op: 'addClip', trackId: track.id, clip: { id: existing?.id ?? '', type: 'captions', mode: 'auto', start: 0, duration: dur, style, sourceTrackIds: resolveTrackIds(d, input.trackIds), ...(lang ? { language: lang } : {}) } }]);
     });
     const transcripts = await store.transcriptsFor(p);
     words = timelineWords(p, transcripts).length;

@@ -1,6 +1,7 @@
 import type { Project, RenderRecord } from '../shared/schema';
 import type { AgentEvent } from '../shared/agent-types';
 import type { MomentsState } from '../shared/moments';
+import type { TranslationsState } from '../shared/subtitles';
 
 export type StudioEvent =
   | { type: 'project'; project: Project; label: string; source: 'user' | 'agent' | 'system' | 'mcp'; canUndo: boolean; canRedo: boolean; past?: string[] }
@@ -8,7 +9,8 @@ export type StudioEvent =
   | { type: 'render'; render: RenderRecord }
   | { type: 'job'; id: string; label: string; status: 'running' | 'done' | 'error'; progress?: number; detail?: string }
   | { type: 'toast'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
-  | { type: 'moments'; state: MomentsState | null };
+  | { type: 'moments'; state: MomentsState | null }
+  | { type: 'translations'; state: TranslationsState };
 
 type Listener = (e: StudioEvent) => void;
 

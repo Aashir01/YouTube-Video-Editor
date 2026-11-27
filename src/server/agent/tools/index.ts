@@ -13,6 +13,7 @@ import { uploadToYouTube } from './youtube';
 import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
 import { createMulticam } from './multicam';
+import { createDubTool, translateSubtitlesTool } from './languages';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
 export const BUILTIN_TOOLS: AgentTool[] = [
@@ -62,6 +63,8 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   renderVideo,
   findShorts,
   createShortTool,
+  translateSubtitlesTool,
+  createDubTool,
   uploadToYouTube,
 ];
 

@@ -95,6 +95,7 @@ const PreviewMenu: React.FC<{ label: string; icon: React.ReactNode; active?: boo
 export const Preview: React.FC = () => {
   const project = useStudio((s) => s.project!);
   const transcripts = useStudio((s) => s.transcripts);
+  const translations = useStudio((s) => s.translations?.table);
   const playing = useStudio((s) => s.playing);
   const setPlaying = useStudio((s) => s.setPlaying);
   const setTime = useStudio((s) => s.setTime);
@@ -130,7 +131,7 @@ export const Preview: React.FC = () => {
   const portrait = height > width;
 
   const assetUrls = useMemo(() => Object.fromEntries(project.assets.map((a) => [a.id, mediaUrl(project.id, useProxies && a.proxy ? a.proxy.file : a.file)])), [project.assets, project.id, useProxies]);
-  const inputProps = useMemo<CompositionInput>(() => ({ project, assetUrls, transcripts, mode: 'preview' }), [project, assetUrls, transcripts]);
+  const inputProps = useMemo<CompositionInput>(() => ({ project, assetUrls, transcripts, mode: 'preview', translations }), [project, assetUrls, transcripts, translations]);
 
   // fit the canvas inside the available area
   useLayoutEffect(() => {

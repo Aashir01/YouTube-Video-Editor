@@ -25,6 +25,9 @@ import { mcpManager } from '../mcp/client';
 import { createShort } from '../shorts';
 import { findMoments, momentsAreCurrent, readMoments, shortFromMoment } from '../moments';
 import { applyMulticam, planMulticam } from '../multicam';
+import { readTranslations, removeLanguage, subtitleSource, subtitlesSrt, translateSubtitles } from '../subtitles';
+import { createDub } from '../dub';
+import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 
@@ -152,6 +155,44 @@ api.post('/projects/:id/shorts', async (c) => {
     .parse(await c.req.json());
   const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
   return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
+});
+
+/** Subtitles in other languages: the translations, and how many sentences of the current edit each still lacks. */
+const translationsReply = async (id: string) => {
+  const p = await store.get(id);
+  const state = await readTranslations(id);
+  return { state, missing: missingCounts(subtitleSource(p, await store.transcriptsFor(p)), state) };
+};
+
+api.get('/projects/:id/translations', async (c) => c.json(await translationsReply(c.req.param('id'))));
+
+api.post('/projects/:id/translations', async (c) => {
+  const id = c.req.param('id');
+  const body = z.object({ languages: z.array(z.string()).min(1).max(20), metadata: z.boolean().optional() }).parse(await c.req.json());
+  const r = await translateSubtitles(id, body.languages, { metadata: body.metadata });
+  return c.json({ ...(await translationsReply(id)), translated: r.translated, failed: r.missing });
+});
+
+api.delete('/projects/:id/translations/:lang', async (c) => {
+  await removeLanguage(c.req.param('id'), c.req.param('lang'));
+  return c.json(await translationsReply(c.req.param('id')));
+});
+
+/** The current edit's subtitles in one language, as an SRT download. */
+api.get('/projects/:id/subtitles/:file', async (c) => {
+  const id = c.req.param('id');
+  const lang = c.req.param('file').replace(/\.srt$/i, '');
+  const p = await store.get(id);
+  const srt = await subtitlesSrt(id, lang);
+  const name = `${p.name.replace(/[^\w\- ]+/g, '').trim() || 'subtitles'}.${lang}.srt`;
+  return new Response(srt, { headers: { 'Content-Type': 'application/x-subrip; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` } });
+});
+
+/** A dubbed copy of the project in another language. */
+api.post('/projects/:id/dub', async (c) => {
+  const body = z.object({ language: z.string(), voice: z.string().optional(), original: z.enum(['duck', 'mute']).optional() }).parse(await c.req.json());
+  const r = await createDub(c.req.param('id'), body.language, { voice: body.voice, original: body.original });
+  return c.json({ id: r.project.id, name: r.project.name, lines: r.lines, cut: r.cut, engine: r.engine });
 });
 
 /** Multicam: sync cameras and microphones by sound and cut between them. */

@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { store } from '../storage/projects';
 import { authUrl, disconnect, handleCallback, uploadVideo, youtubeConfigured } from '../services/youtube';
+import { youtubeExtras } from '../subtitles';
 import { bus } from '../events';
 
 export const installYouTubeRoutes = (app: Hono): void => {
@@ -43,6 +44,7 @@ export const installYouTubeRoutes = (app: Hono): void => {
       videoFile: store.renderPath(id, render.file),
       thumbnailFile: thumb && fs.existsSync(thumb) ? thumb : undefined,
       captionsFile: fs.existsSync(srt) ? srt : undefined,
+      ...(await youtubeExtras(p, render.file)),
       privacy: body.privacy,
       publishAt: body.publishAt,
       onProgress: (x) => bus.emit(id, { type: 'job', id: jobId, label: 'Uploading to YouTube', status: 'running', progress: x }),

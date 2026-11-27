@@ -20,6 +20,8 @@ import { bus } from '../events';
 import { store } from '../storage/projects';
 import { exportAudio, normalizeLoudness, probe } from '../media/ffmpeg';
 import { wordsToSrt } from '../services/documents';
+import { readTranslations } from '../subtitles';
+import { subtitleSource, translatedWords } from '../../shared/subtitles';
 import { resolveBrowserExecutable } from './browser';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ export const buildCompositionInput = async (project: Project, mode: CompositionI
   assetUrls: assetUrlMap(project, base),
   transcripts: await store.transcriptsFor(project),
   mode,
+  translations: (await readTranslations(project.id)).table,
 });
 
 // ---------------------------------------------------------------------------
@@ -273,14 +276,26 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
       } else await fsp.rename(raw, final);
       // captions file next to the video (handy for YouTube upload)
       const transcripts = inputProps.transcripts;
-      const capClip = fresh.tracks.flatMap((t) => t.clips).find((c) => c.type === 'captions');
-      const words = capClip && capClip.type === 'captions' ? captionWords(fresh, capClip, transcripts) : timelineWords(fresh, transcripts);
+      // what the captions show (every captions clip), or everything spoken when there are none
+      const words = subtitleSource(fresh, transcripts);
       const offset = opts.range?.[0] ?? 0;
       const inRange = words.filter((w) => !opts.range || (w.start >= opts.range[0] && w.end <= opts.range[1])).map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
       if (inRange.length) await fsp.writeFile(store.renderPath(projectId, `${record.id}.srt`), wordsToSrt(inRange));
+      // and one per subtitle language (sentences not translated yet stay in the original)
+      const subtitles: string[] = [];
+      for (const lang of (await readTranslations(projectId)).languages) {
+        const table = inputProps.translations?.[lang];
+        if (!table || !Object.keys(table).length) continue;
+        const tw = translatedWords(words, table, lang)
+          .filter((w) => !opts.range || (w.start >= opts.range[0] && w.end <= opts.range[1]))
+          .map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
+        if (!tw.length) continue;
+        await fsp.writeFile(store.renderPath(projectId, `${record.id}.${lang}.srt`), wordsToSrt(tw));
+        subtitles.push(lang);
+      }
       const info = await probe(final).catch(() => null);
       const stat = await fsp.stat(final);
-      await update({ status: 'done', progress: 1, file: `${record.id}.mp4`, sizeBytes: stat.size, durationSec: info?.duration ?? duration, elapsedSec: Math.round((Date.now() - started) / 100) / 10 });
+      await update({ status: 'done', progress: 1, file: `${record.id}.mp4`, sizeBytes: stat.size, durationSec: info?.duration ?? duration, elapsedSec: Math.round((Date.now() - started) / 100) / 10, ...(subtitles.length ? { subtitles } : {}) });
       bus.toast(projectId, 'success', `Render finished (${(stat.size / 1e6).toFixed(1)} MB)`);
     } catch (err) {
       const msg = (err as Error).message ?? String(err);

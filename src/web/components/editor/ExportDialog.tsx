@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Thumbnail } from '@remotion/player';
 import { toast } from 'sonner';
-import { CircleCheck, Clapperboard, Download, ExternalLink, FileText, Plus, RefreshCw, Trash2, Upload, WandSparkles, X } from 'lucide-react';
+import { CircleCheck, Clapperboard, Download, ExternalLink, FileText, Languages, Plus, RefreshCw, Trash2, Upload, WandSparkles, X } from 'lucide-react';
 import type { RenderRecord, ThumbnailInput } from '../../../shared/schema';
 import { ThumbnailComposition, THUMBNAIL_TEMPLATES } from '../../../remotion/Thumbnail';
 import { formatTime, projectDuration } from '../../../shared/timeline';
@@ -9,6 +9,7 @@ import { api, mediaUrl, renderUrl } from '../../lib/api';
 import { useStudio } from '../../lib/store';
 import { cn, errorText, formatBytes, formatClock } from '../../lib/utils';
 import { YouTubeIcon } from '../icons';
+import { LanguagesPanel } from './LanguagesPanel';
 import { Badge, Field, Modal, ProgressBar, Segmented, SelectField, Spinner, Switch, TextArea, TextInput } from '../ui';
 
 const PRESETS = [
@@ -56,6 +57,11 @@ const RenderRow: React.FC<{ r: RenderRecord }> = ({ r }) => {
             <a className="btn btn-sm btn-ghost" href={renderUrl(projectId, r.file.replace(/\.(mp4|mp3|m4a)$/, '.srt'), true)} download title="Captions / transcript file">
               <FileText className="size-3.5" /> SRT
             </a>
+            {r.subtitles?.map((lang) => (
+              <a key={lang} className="btn btn-sm btn-ghost px-1.5 font-mono text-[10px] uppercase" href={renderUrl(projectId, r.file!.replace(/\.mp4$/, `.${lang}.srt`), true)} download title={`Subtitles: ${lang}`}>
+                {lang}
+              </a>
+            ))}
           </>
         )}
         {running ? (
@@ -391,7 +397,7 @@ const UploadSection: React.FC = () => {
 export const ExportDialog: React.FC = () => {
   const open = useStudio((s) => s.exportOpen);
   const setOpen = useStudio((s) => s.setExportOpen);
-  const [tab, setTab] = useState<'render' | 'youtube'>('render');
+  const [tab, setTab] = useState<'render' | 'youtube' | 'languages'>('render');
   return (
     <Modal open={open} onOpenChange={setOpen} title="Export & publish" description="Render a high-quality MP4 and get it ready for YouTube." className="w-[min(980px,96vw)]" bodyClassName="p-0">
       <div className="border-b border-line px-5 py-2">
@@ -401,10 +407,15 @@ export const ExportDialog: React.FC = () => {
           options={[
             { value: 'render', label: <><Clapperboard className="size-3.5" /> Render</> },
             { value: 'youtube', label: <><YouTubeIcon className="size-3.5" /> YouTube</> },
+            { value: 'languages', label: <><Languages className="size-3.5" /> Languages</> },
           ]}
         />
       </div>
-      {tab === 'render' ? (
+      {tab === 'languages' ? (
+        <div className="p-5">
+          <LanguagesPanel />
+        </div>
+      ) : tab === 'render' ? (
         <div className="grid gap-6 p-5 md:grid-cols-[1.2fr_1fr]">
           <div>
             <h3 className="label">Video</h3>

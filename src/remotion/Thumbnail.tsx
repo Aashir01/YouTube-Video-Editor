@@ -175,7 +175,7 @@ export const ThumbnailComposition: React.FC<ThumbnailInput> = ({ project, assetU
   const { width, height, fps } = useVideoConfig();
   const theme = useMemo(() => makeTheme(project.brand, width, height, fps), [project.brand, width, height, fps]);
   useFontsReady(['anton', 'montserrat', 'inter', project.brand.headingFont]);
-  const value = useMemo(() => ({ project, assetUrls, transcripts: {}, mode: 'still' as const, speech: [] }), [project, assetUrls]);
+  const value = useMemo(() => ({ project, assetUrls, transcripts: {}, mode: 'still' as const, speech: [], translations: {} }), [project, assetUrls]);
   return (
     <StudioProvider value={value} theme={theme}>
       <AbsoluteFill style={{ backgroundColor: '#000' }}>

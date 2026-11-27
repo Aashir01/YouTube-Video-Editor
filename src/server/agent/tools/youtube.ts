@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { z } from 'zod';
 import { store } from '../../storage/projects';
 import { uploadVideo, youtubeConfigured } from '../../services/youtube';
+import { youtubeExtras } from '../../subtitles';
 import { defineTool } from '../types';
 import { getProject, mutate } from './helpers';
 
@@ -31,6 +32,7 @@ export const uploadToYouTube = defineTool({
       videoFile,
       thumbnailFile: thumb && fs.existsSync(thumb) ? thumb : undefined,
       captionsFile: fs.existsSync(srt) ? srt : undefined,
+      ...(await youtubeExtras(p, render.file)),
       privacy: input.privacy,
       publishAt: input.publishAt,
       onProgress: (x) => ctx.progress(`Uploading ${Math.round(x * 100)}%`),
