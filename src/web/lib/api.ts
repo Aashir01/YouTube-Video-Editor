@@ -154,6 +154,7 @@ export const api = {
     send<{ state: TranslationsState; missing: Record<string, number>; translated: number; failed: number }>('POST', `/api/projects/${id}/translations`, { languages, metadata }),
   removeLanguage: (id: string, lang: string) => send<{ state: TranslationsState; missing: Record<string, number> }>('DELETE', `/api/projects/${id}/translations/${encodeURIComponent(lang)}`),
   dub: (id: string, body: { language: string; voice?: string; original?: 'duck' | 'mute' }) => send<{ id: string; name: string; lines: number; cut: number; engine: string }>('POST', `/api/projects/${id}/dub`, body),
+  findBeats: (id: string, assetId: string) => send<{ tempo: number; beats: number }>('POST', `/api/projects/${id}/assets/${assetId}/beats`),
   createMulticam: (id: string, body: { cameras: string[]; microphones?: string[]; follow?: 'speaker' | 'first'; wide?: string; at?: number }) =>
     send<{ groupId: string; summary: string; warnings: string[]; cuts: number }>('POST', `/api/projects/${id}/multicam`, body),
   cancelRender: (id: string, renderId: string) => send('POST', `/api/projects/${id}/render/${renderId}/cancel`),

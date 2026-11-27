@@ -7,7 +7,7 @@ export const removeBackgroundTool = defineTool({
   name: 'remove_background',
   category: 'edit',
   description:
-    'Remove the background of a video clip so what is behind it shows through: mode "person" finds the person with a local segmentation model (no green screen needed: talking heads, presenters), "screen" keys out a green or blue screen (color found automatically, or pass one). The clip switches to a new video with transparency (one undo step); put an image, video or b-roll on a track below it, or pass behind "blur" for a blurred copy of the original underneath (portrait mode). Mode "restore" shows the original again. Runs locally; takes a while for long clips.',
+    'Remove the background of a video clip so what is behind it shows through: mode "person" finds the person with a local segmentation model (no green screen needed: talking heads, presenters), "screen" keys out a green or blue screen (color found automatically, or pass one). The clip switches to a new video with transparency (one undo step); put an image, video or b-roll on a track below it, or pass behind "blur" for a blurred copy of the original underneath (portrait mode). Mode "restore" shows the original again (also after stabilize_video or apply_lut). Runs locally; takes a while for long clips.',
   schema: z.object({
     clipId: z.string(),
     mode: z.enum(['person', 'screen', 'restore']).default('person'),

@@ -420,6 +420,9 @@ export const AssetSchema = z.object({
       silences: z.array(z.tuple([z.number(), z.number()])).optional(),
       scenes: z.array(z.number()).optional(),
       loudnessLufs: z.number().optional(),
+      /** music: beat times (s of the source) and tempo, to snap and cut to */
+      beats: z.array(z.number()).optional(),
+      tempo: z.number().optional(),
     })
     .default({}),
 });

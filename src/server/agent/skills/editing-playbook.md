@@ -45,3 +45,7 @@ description: Professional editing technique — cuts, pacing, b-roll, zooms, tra
 - No black gaps on Main, no orphaned b-roll past the end, music ends with a fade at the end of the video.
 - Every on-screen text stays long enough to read: ≥ 0.4s per word, ≥ 1.5s minimum.
 - Check a few frames with `preview_frames` at scene starts, mid-graphics and the ending.
+
+## Fixing footage and music edits
+- Shaky handheld or walking shots: `stabilize_video` (strong for walking). A user's .cube LUT (log footage, a creative look): `apply_lut`, at partial `intensity` for a subtle look. `remove_background` with mode "restore" undoes any of these.
+- Montages and b-roll over music: put the music on the Music track (role "music"), then `cut_to_beat` on the pictures so every cut lands on a beat (`every: 2` or `4` for slower cuts).

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Plus, ScanFace, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Music, Plus, ScanFace, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import {
   CAPTION_PRESETS,
   EASINGS,
@@ -28,7 +28,7 @@ import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
 import { SchemaForm } from './SchemaForm';
 import { AnimationSection, useAnim } from './Keyframes';
-import { BackgroundSection, BlurEditor, BlurFacesButton, MotionTracking } from './Tracking';
+import { BackgroundSection, BlurEditor, BlurFacesButton, FootageSection, MotionTracking } from './Tracking';
 
 const FONT_OPTIONS = FONTS.map((f) => ({ value: f.id, label: f.family.replace(' Variable', '') }));
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace(/-/g, ' ') }));
@@ -407,7 +407,38 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
       </button>
     )}
     <Switch label="Loop to fill the clip" checked={clip.loop} onChange={(v) => patch({ loop: v })} />
+    {clip.role === 'music' && <BeatsRow assetId={clip.assetId} />}
   </Section>
+  );
+};
+
+/** Music: its tempo and beats (shown on the timeline, snapped to, and used by "Cut to the beat"). */
+const BeatsRow: React.FC<{ assetId: string }> = ({ assetId }) => {
+  const project = useStudio((s) => s.project!);
+  const a = project.assets.find((x) => x.id === assetId);
+  const [busy, setBusy] = useState(false);
+  if (a?.analysis.beats?.length) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-muted">
+        <Music className="size-3.5 text-hue-green" /> {Math.round(a.analysis.tempo ?? 0)} BPM · {a.analysis.beats.length} beats: clips snap to them; select b-roll and right-click → Cut to the beat
+      </div>
+    );
+  }
+  return (
+    <button
+      className="btn btn-sm"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        api
+          .findBeats(project.id, assetId)
+          .then((r) => toast.success(`${Math.round(r.tempo)} BPM, ${r.beats} beats`))
+          .catch((e) => toast.error(errorText(e)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <Music className="size-3.5" /> {busy ? 'Listening…' : 'Find the beats'}
+    </button>
   );
 };
 
@@ -695,6 +726,7 @@ export const Inspector: React.FC = () => {
         {clip.type === 'video' && clip.multicam && <MulticamSection clip={clip} />}
         {clip.type === 'video' && <VideoEditor clip={clip} patch={patch} />}
         {clip.type === 'video' && <BackgroundSection clip={clip} />}
+        {clip.type === 'video' && <FootageSection clip={clip} />}
         {clip.type === 'image' && <ImageEditor clip={clip} patch={patch} />}
         {clip.type === 'audio' && <AudioEditor clip={clip} patch={patch} />}
         {clip.type === 'text' && <TextEditor clip={clip} patch={patch} />}
