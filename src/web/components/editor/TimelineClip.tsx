@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Asset, Clip, Project, VideoClip } from '../../../shared/schema';
+import { channelAt, isAnimated, keyframeTimes, KF_EPS } from '../../../shared/keyframes';
+import { formatTime } from '../../../shared/timeline';
 import { mediaUrl } from '../../lib/api';
 import { clipLabel } from '../../lib/store';
 import { cn, decodePeaks } from '../../lib/utils';
@@ -95,7 +97,7 @@ const Filmstrip: React.FC<{ projectId: string; asset: Asset; clip: VideoClip; wi
 // Clip block
 // ---------------------------------------------------------------------------
 
-export type DragMode = 'move' | 'trim-start' | 'trim-end' | 'fade-in' | 'fade-out' | 'volume';
+export type DragMode = 'move' | 'trim-start' | 'trim-end' | 'fade-in' | 'fade-out' | 'volume' | 'keyframe';
 
 export interface ClipBlockProps {
   clip: Clip;
@@ -107,14 +109,16 @@ export interface ClipBlockProps {
   dragging: boolean;
   locked: boolean;
   dimmed: boolean;
-  onPointerDown: (e: React.PointerEvent, clip: Clip, mode: DragMode) => void;
+  /** a keyframe being dragged on this clip: drawn at `to` until it is dropped */
+  kfDrag?: { from: number; to: number } | null;
+  onPointerDown: (e: React.PointerEvent, clip: Clip, mode: DragMode, keyframeTime?: number) => void;
   onContextMenu: (e: React.MouseEvent, clip: Clip) => void;
 }
 
 /** Volume (0–2) to a y position inside the clip: 1.0 sits in the middle. */
 export const volumeY = (v: number, h: number) => 6 + (1 - Math.min(2, Math.max(0, v)) / 2) * (h - 12);
 
-export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, left, width, height, selected, dragging, locked, dimmed, onPointerDown, onContextMenu }) => {
+export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, left, width, height, selected, dragging, locked, dimmed, kfDrag, onPointerDown, onContextMenu }) => {
   const color = clipColor(clip);
   const asset = 'assetId' in clip ? project.assets.find((a) => a.id === clip.assetId) : undefined;
   const thumb = asset?.thumb && (clip.type === 'video' || clip.type === 'image') ? mediaUrl(project.id, asset.thumb) : null;
@@ -143,6 +147,19 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
   const fo = Math.min(width / 2, fadeOut * pps);
   const showEnvelope = envelope && (clip.type === 'audio' || selected);
   const filmstrip = clip.type === 'video' && asset?.filmstrip;
+  // an animated volume is drawn as its real curve (the flat line handle only edits a static volume)
+  const volAnimated = (clip.type === 'audio' || clip.type === 'video') && isAnimated(clip, 'volume');
+  const volCurve = useMemo(() => {
+    if (!volAnimated || !envelope) return null;
+    const pts: string[] = [];
+    const step = Math.max(2, width / 400);
+    for (let x = 0; x <= width + 0.01; x += step) {
+      const g = Math.min(1, fi > 0 ? x / fi : 1, fo > 0 ? (width - x) / fo : 1);
+      pts.push(`${x.toFixed(1)},${volumeY(channelAt(clip, 'volume', x / pps) * Math.max(0, g), h).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }, [volAnimated, envelope, width, fi, fo, clip, pps, h]);
+  const kts = useMemo(() => keyframeTimes(clip), [clip]);
 
   return (
     <div
@@ -189,14 +206,14 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
         <svg className={cn('pointer-events-none absolute inset-0 transition-opacity', showEnvelope ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} width={width} height={h}>
           {fi > 0 && <polygon points={`0,0 ${fi},0 0,${h}`} fill="rgb(0 0 0 / 0.35)" />}
           {fo > 0 && <polygon points={`${width - fo},0 ${width},0 ${width},${h}`} fill="rgb(0 0 0 / 0.35)" />}
-          <polyline points={`0,${fi > 0 ? h : vy} ${fi},${vy} ${width - fo},${vy} ${width},${fo > 0 ? h : vy}`} fill="none" stroke="rgb(255 255 255 / 0.85)" strokeWidth={1.25} />
+          <polyline points={volCurve ?? `0,${fi > 0 ? h : vy} ${fi},${vy} ${width - fo},${vy} ${width},${fo > 0 ? h : vy}`} fill="none" stroke={volCurve ? 'rgb(250 204 21 / 0.95)' : 'rgb(255 255 255 / 0.85)'} strokeWidth={1.25} />
         </svg>
       )}
       {envelope && !locked && (
         <>
-          {/* drag the line up/down for volume */}
+          {/* drag the line up/down for volume (an animated volume is edited with keyframes) */}
           <div
-            className={cn('absolute h-2 -translate-y-1/2 cursor-ns-resize', showEnvelope ? '' : 'hidden group-hover:block')}
+            className={cn('absolute h-2 -translate-y-1/2 cursor-ns-resize', showEnvelope && !volAnimated ? '' : 'hidden', !volAnimated && 'group-hover:block')}
             style={{ top: vy, left: fi + 6, right: fo + 6 }}
             title={`Volume ${Math.round(volume * 100)}% — drag up/down`}
             onPointerDown={(e) => onPointerDown(e, clip, 'volume')}
@@ -215,6 +232,27 @@ export const ClipBlock: React.FC<ClipBlockProps> = React.memo(({ clip, project, 
             onPointerDown={(e) => onPointerDown(e, clip, 'fade-out')}
           />
         </>
+      )}
+      {kts.length > 0 && width > 14 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-3">
+          {kts.map((t) => {
+            const shown = kfDrag && Math.abs(kfDrag.from - t) <= KF_EPS ? kfDrag.to : t;
+            return (
+              <div
+                key={t}
+                data-kf-time={t}
+                title={`Keyframe at ${formatTime(clip.start + shown)} — drag to move, right-click for easing`}
+                className={cn(
+                  'absolute bottom-[3px] size-2 -translate-x-1/2 rotate-45 rounded-[1px] border border-black/60 shadow-[0_0_4px_rgb(0_0_0/0.6)]',
+                  locked ? 'pointer-events-none bg-hue-yellow/50' : 'pointer-events-auto cursor-ew-resize',
+                  !locked && (selected ? 'bg-hue-yellow' : 'bg-hue-yellow/75 hover:bg-hue-yellow'),
+                )}
+                style={{ left: Math.min(width - 4, Math.max(4, shown * pps)) }}
+                onPointerDown={(e) => onPointerDown(e, clip, 'keyframe', t)}
+              />
+            );
+          })}
+        </div>
       )}
       {!locked && (
         <>

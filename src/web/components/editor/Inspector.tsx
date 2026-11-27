@@ -26,6 +26,7 @@ import { cn, errorText } from '../../lib/utils';
 import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
 import { SchemaForm } from './SchemaForm';
+import { AnimationSection, useAnim } from './Keyframes';
 
 const FONT_OPTIONS = FONTS.map((f) => ({ value: f.id, label: f.family.replace(' Variable', '') }));
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace(/-/g, ' ') }));
@@ -77,6 +78,7 @@ const Transitions: React.FC<{ clip: Clip; patch: Patch }> = ({ clip, patch }) =>
 };
 
 const Placement: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip, patch }) => {
+  const A = useAnim(clip, patch);
   const boxes: Record<string, { x: number; y: number; w: number; h: number } | null> = {
     full: null,
     'top-left': { x: 0.04, y: 0.05, w: 0.32, h: 0.32 },
@@ -85,31 +87,42 @@ const Placement: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ cl
     'bottom-right': { x: 0.64, y: 0.63, w: 0.32, h: 0.32 },
     center: { x: 0.2, y: 0.2, w: 0.6, h: 0.6 },
   };
-  const current = clip.box ? (Object.entries(boxes).find(([, b]) => b && Math.abs(b.x - clip.box!.x) < 0.005 && Math.abs(b.y - clip.box!.y) < 0.005)?.[0] ?? 'custom') : 'full';
+  const bx = clip.box ? { x: A.value('box.x'), y: A.value('box.y') } : null;
+  const current = bx ? (Object.entries(boxes).find(([, b]) => b && Math.abs(b.x - bx.x) < 0.005 && Math.abs(b.y - bx.y) < 0.005)?.[0] ?? 'custom') : 'full';
+  const boxAnimated = (['box.x', 'box.y', 'box.w', 'box.h'] as const).some((ch) => A.animated(ch));
+  const setLayout = (v: string) => {
+    if (v === 'custom') return;
+    const b = boxes[v] ?? null;
+    if (!boxAnimated) return patch({ box: b, radius: v === 'full' ? 0 : 24, shadow: v !== 'full' });
+    // an animated frame gets a keyframe at the playhead instead
+    const f = b ?? { x: 0, y: 0, w: 1, h: 1 };
+    A.set({ 'box.x': f.x, 'box.y': f.y, 'box.w': f.w, 'box.h': f.h }, 'Layout');
+    patch({ radius: v === 'full' ? 0 : 24, shadow: v !== 'full' });
+  };
   return (
     <Section title="Frame">
       <Field label="Layout">
         <SelectField
           value={current}
-          onChange={(v) => v !== 'custom' && patch({ box: boxes[v] ?? null, radius: v === 'full' ? 0 : 24, shadow: v !== 'full' })}
+          onChange={setLayout}
           options={[...Object.keys(boxes).map((k) => ({ value: k, label: k === 'full' ? 'Full frame' : `Picture-in-picture: ${k.replace('-', ' ')}` })), ...(current === 'custom' ? [{ value: 'custom', label: 'Custom' }] : [])]}
         />
       </Field>
       {clip.box && (
         <div className="grid grid-cols-2 gap-2">
-          <NumberField label="X" value={clip.box.x} min={-1} max={2} step={0.01} onChange={(v) => patch({ box: { ...clip.box!, x: v } })} />
-          <NumberField label="Y" value={clip.box.y} min={-1} max={2} step={0.01} onChange={(v) => patch({ box: { ...clip.box!, y: v } })} />
-          <NumberField label="W" value={clip.box.w} min={0.01} max={3} step={0.01} onChange={(v) => patch({ box: { ...clip.box!, w: v } })} />
-          <NumberField label="H" value={clip.box.h} min={0.01} max={3} step={0.01} onChange={(v) => patch({ box: { ...clip.box!, h: v } })} />
+          <NumberField label="X" {...A.field('box.x')} min={-1} max={2} step={0.01} />
+          <NumberField label="Y" {...A.field('box.y')} min={-1} max={2} step={0.01} />
+          <NumberField label="W" {...A.field('box.w')} min={0.01} max={3} step={0.01} />
+          <NumberField label="H" {...A.field('box.h')} min={0.01} max={3} step={0.01} />
         </div>
       )}
       <Field label="Fit">
         <Segmented value={clip.fit} onChange={(v) => patch({ fit: v })} options={opts(['cover', 'contain', 'fill']).map((o) => ({ value: o.value as 'cover', label: o.label }))} size="sm" />
       </Field>
-      <RangeField label="Opacity" value={clip.opacity} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => patch({ opacity: v })} />
+      <RangeField label="Opacity" {...A.field('opacity')} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} />
       <div className="grid grid-cols-2 gap-2">
         <NumberField label="Radius" value={clip.radius} min={0} max={500} step={2} precision={0} onChange={(v) => patch({ radius: v })} />
-        <NumberField label="Rotate" value={clip.rotation} min={-360} max={360} step={1} precision={0} unit="°" onChange={(v) => patch({ rotation: v })} />
+        <NumberField label="Rotate" {...A.field('rotation')} min={-360} max={360} step={1} precision={0} unit="°" />
       </div>
       <div className="flex gap-4">
         <Switch label="Shadow" checked={clip.shadow} onChange={(v) => patch({ shadow: v })} />
@@ -129,31 +142,38 @@ const FOCUS_PRESETS: { label: string; x: number; y: number }[] = [
 
 /** Crop focus and static zoom: the controls for reframing (e.g. 16:9 footage in a 9:16 Short). */
 const Reframe: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip, patch }) => {
-  const f = clip.focus ?? { x: 0.5, y: 0.5 };
-  const changed = Boolean(clip.focus) || clip.scale !== 1;
+  const A = useAnim(clip, patch);
+  const edit = useStudio((s) => s.edit);
+  const f = { x: A.value('focus.x'), y: A.value('focus.y') };
+  const animated = A.animated('focus.x') || A.animated('focus.y') || A.animated('scale');
+  const changed = Boolean(clip.focus) || clip.scale !== 1 || animated;
+  const reset = () =>
+    animated
+      ? void edit([{ op: 'clearKeyframes', clipId: clip.id, channels: ['focus.x', 'focus.y', 'scale'] }, { op: 'updateClip', clipId: clip.id, patch: { focus: null, scale: 1 } }], 'Reset reframe')
+      : patch({ focus: null, scale: 1 });
   return (
     <Section
       title="Reframe"
       defaultOpen={changed}
       right={
         changed ? (
-          <button className="text-[11px] font-semibold text-dim hover:text-text" onClick={() => patch({ focus: null, scale: 1 })}>
+          <button className="text-[11px] font-semibold text-dim hover:text-text" onClick={reset}>
             Reset
           </button>
         ) : undefined
       }
     >
       <p className="-mt-1 text-[11px] leading-snug text-dim">Drag the picture in the preview to pan it. Zoom in to crop tighter.</p>
-      <RangeField label="Zoom" value={clip.scale} min={1} max={3} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => patch({ scale: Math.round(v * 100) / 100 })} />
+      <RangeField label="Zoom" {...A.field('scale')} onChange={(v) => A.set({ scale: Math.round(v * 100) / 100 }, 'Zoom')} min={1} max={3} step={0.01} format={(v) => `${v.toFixed(2)}×`} />
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label="Focus X" value={f.x} min={0} max={1} step={0.01} onChange={(v) => patch({ focus: { ...f, x: v } })} />
-        <NumberField label="Focus Y" value={f.y} min={0} max={1} step={0.01} onChange={(v) => patch({ focus: { ...f, y: v } })} />
+        <NumberField label="Focus X" {...A.field('focus.x')} min={0} max={1} step={0.01} />
+        <NumberField label="Focus Y" {...A.field('focus.y')} min={0} max={1} step={0.01} />
       </div>
       <div className="flex flex-wrap gap-1">
         {FOCUS_PRESETS.map((p) => (
           <button
             key={p.label}
-            onClick={() => patch({ focus: { x: p.x, y: p.y } })}
+            onClick={() => A.set({ 'focus.x': p.x, 'focus.y': p.y }, 'Reframe')}
             className={cn('rounded-md border px-2 py-0.5 text-[11px] font-semibold', Math.abs(f.x - p.x) < 0.01 && Math.abs(f.y - p.y) < 0.01 ? 'border-accent bg-accent/15 text-text' : 'border-line text-muted hover:text-text')}
           >
             {p.label}
@@ -242,12 +262,13 @@ const Motion: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip,
 
 const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch }) => {
   const projectId = useStudio((s) => s.projectId)!;
+  const A = useAnim(clip, patch);
   const [busy, setBusy] = useState(false);
   return (
     <>
       <Section title="Audio">
         <Switch label="Mute clip audio" checked={clip.muted} onChange={(v) => patch({ muted: v })} />
-        {!clip.muted && <RangeField label="Volume" value={clip.volume} min={0} max={2} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => patch({ volume: v })} />}
+        {!clip.muted && <RangeField label="Volume" {...A.field('volume')} min={0} max={2} step={0.01} format={(v) => `${Math.round(v * 100)}%`} />}
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Fade in" value={clip.audioFadeIn} min={0} step={0.1} unit="s" onChange={(v) => patch({ audioFadeIn: v })} />
           <NumberField label="Fade out" value={clip.audioFadeOut} min={0} step={0.1} unit="s" onChange={(v) => patch({ audioFadeOut: v })} />
@@ -291,7 +312,9 @@ const ImageEditor: React.FC<{ clip: ImageClip; patch: Patch }> = ({ clip, patch 
   </>
 );
 
-const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch }) => (
+const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch }) => {
+  const A = useAnim(clip, patch);
+  return (
   <Section title="Audio">
     <Field label="Role">
       <Segmented
@@ -306,7 +329,7 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
         ]}
       />
     </Field>
-    <RangeField label="Volume" value={clip.volume} min={0} max={2} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => patch({ volume: v })} />
+    <RangeField label="Volume" {...A.field('volume')} min={0} max={2} step={0.01} format={(v) => `${Math.round(v * 100)}%`} />
     <div className="grid grid-cols-2 gap-2">
       <NumberField label="Fade in" value={clip.fadeIn} min={0} step={0.1} unit="s" onChange={(v) => patch({ fadeIn: v })} />
       <NumberField label="Fade out" value={clip.fadeOut} min={0} step={0.1} unit="s" onChange={(v) => patch({ fadeOut: v })} />
@@ -319,10 +342,12 @@ const AudioEditor: React.FC<{ clip: AudioClip; patch: Patch }> = ({ clip, patch 
     )}
     <Switch label="Loop to fill the clip" checked={clip.loop} onChange={(v) => patch({ loop: v })} />
   </Section>
-);
+  );
+};
 
 const TextEditor: React.FC<{ clip: TextClip; patch: Patch }> = ({ clip, patch }) => {
   const st = clip.style;
+  const A = useAnim(clip, patch);
   const style = (p: Record<string, unknown>) => patch({ style: p });
   // double-clicking text on the canvas jumps here
   useEffect(() => {
@@ -346,9 +371,11 @@ const TextEditor: React.FC<{ clip: TextClip; patch: Patch }> = ({ clip, patch })
           <Field label="Out">
             <SelectField value={clip.animationOut} options={opts(TEXT_ANIMATIONS)} onChange={(v) => patch({ animationOut: v })} />
           </Field>
-          <NumberField label="X" value={clip.x} min={0} max={1} step={0.01} onChange={(v) => patch({ x: v })} />
-          <NumberField label="Y" value={clip.y} min={0} max={1} step={0.01} onChange={(v) => patch({ y: v })} />
+          <NumberField label="X" {...A.field('x')} min={0} max={1} step={0.01} />
+          <NumberField label="Y" {...A.field('y')} min={0} max={1} step={0.01} />
+          <NumberField label="Rotate" {...A.field('rotation')} min={-360} max={360} step={1} precision={0} unit="°" />
         </div>
+        <RangeField label="Opacity" {...A.field('opacity')} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} />
       </Section>
       <Section title="Style">
         <div className="grid grid-cols-2 gap-2">
@@ -358,7 +385,7 @@ const TextEditor: React.FC<{ clip: TextClip; patch: Patch }> = ({ clip, patch })
           <Field label="Align">
             <SelectField value={st.align} options={opts(['left', 'center', 'right'])} onChange={(v) => style({ align: v })} />
           </Field>
-          <NumberField label="Size" value={st.size} min={6} max={600} step={2} precision={0} onChange={(v) => style({ size: v })} />
+          <NumberField label="Size" {...A.field('style.size')} min={6} max={600} step={2} precision={0} />
           <NumberField label="Weight" value={st.weight} min={100} max={900} step={100} precision={0} onChange={(v) => style({ weight: v })} />
         </div>
         <Field label="Color" inline>
@@ -598,6 +625,7 @@ export const Inspector: React.FC = () => {
         {clip.type === 'scene' && <SceneEditor clip={clip} patch={patch} />}
         {clip.type === 'code' && <CodeEditor clip={clip} patch={patch} />}
         {clip.type === 'captions' && <CaptionsEditor clip={clip} patch={patch} />}
+        <AnimationSection clip={clip} />
         {clip.type !== 'audio' && clip.type !== 'captions' && <Transitions clip={clip} patch={patch} />}
       </div>
       <div className="flex gap-1.5 border-t border-line p-2">

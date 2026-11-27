@@ -5,7 +5,9 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Bookmark,
+  Check,
   ClipboardPaste,
+  Crosshair,
   Copy,
   Eraser,
   Eye,
@@ -27,7 +29,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { TRACK_ACCEPTS, type Clip, type Project, type Track } from '../../../shared/schema';
+import { KEYFRAME_EASES, TRACK_ACCEPTS, type Clip, type Project, type Track } from '../../../shared/schema';
+import { DEFAULT_EASE, channelKeys, channelsAt, KF_EPS } from '../../../shared/keyframes';
 import { clipEnd, conflictsOnTrack, projectDuration } from '../../../shared/timeline';
 import { uid } from '../../../shared/ids';
 import type { EditOp } from '../../../shared/ops';
@@ -41,6 +44,7 @@ import { cn, clamp, formatClock, formatTimecode, modKey } from '../../lib/utils'
 import { TrackIcon } from '../icons';
 import { IconBtn, Menu, Tip } from '../ui';
 import { ClipBlock, type DragMode } from './TimelineClip';
+import { EASE_LABELS } from './Keyframes';
 
 const HEADER_W = 172;
 const RULER_H = 26;
@@ -326,6 +330,8 @@ export const Timeline: React.FC = () => {
   const [dropHint, setDropHint] = useState<{ trackId: string; time: number } | null>(null);
   const [menuClip, setMenuClip] = useState<string | null>(null);
   const [menuTrack, setMenuTrack] = useState<string | null>(null);
+  const [menuKf, setMenuKf] = useState<number | null>(null);
+  const [kfDrag, setKfDrag] = useState<{ clipId: string; from: number; to: number } | null>(null);
 
   const duration = projectDuration(project);
   const zoom = storeZoom > 0 ? storeZoom : 40;
@@ -432,7 +438,7 @@ export const Timeline: React.FC = () => {
     return best;
   };
 
-  const onClipPointerDown = (e: React.PointerEvent, clip: Clip, mode: DragMode) => {
+  const onClipPointerDown = (e: React.PointerEvent, clip: Clip, mode: DragMode, kfTime?: number) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const st = useStudio.getState();
@@ -446,6 +452,36 @@ export const Timeline: React.FC = () => {
     if (!st.selection.includes(clip.id)) st.select([clip.id]);
     if (st.rightTab !== 'inspector' && e.detail >= 2) st.setRightTab('inspector');
     if (ref.track.locked) return;
+
+    // keyframe diamond: click = go there, drag = retime (snapped to frames)
+    if (mode === 'keyframe' && kfTime !== undefined) {
+      const fps = st.project!.canvas.fps;
+      player.seek(clip.start + Math.max(0, kfTime));
+      const startX = e.clientX;
+      let moved = false;
+      let to = kfTime;
+      const onMove = (ev: PointerEvent) => {
+        if (!moved && Math.abs(ev.clientX - startX) < 3) return;
+        moved = true;
+        to = clamp(Math.round((kfTime + (ev.clientX - startX) / zoom) * fps) / fps, 0, clip.duration);
+        to = Math.round(to * 1000) / 1000;
+        setKfDrag({ clipId: clip.id, from: kfTime, to });
+        const d = to - kfTime;
+        setReadout({ x: ev.clientX, y: ev.clientY, text: `Keyframe ${formatTimecode(clip.start + to, fps)}  ${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}s` });
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        setKfDrag(null);
+        setReadout(null);
+        if (!moved || Math.abs(to - kfTime) < 0.0005) return;
+        void edit([{ op: 'moveKeyframes', clipId: clip.id, from: kfTime, to }], 'Move keyframe');
+        player.seek(clip.start + to);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      return;
+    }
 
     if (mode === 'fade-in' || mode === 'fade-out' || mode === 'volume') {
       const el = (e.currentTarget as HTMLElement).closest('[data-clip-id]') as HTMLElement | null;
@@ -644,7 +680,31 @@ export const Timeline: React.FC = () => {
   const menuRef = menuClip ? getClipRef(project, menuClip) : null;
   const time = () => useStudio.getState().time;
 
-  const clipMenuItems = menuRef
+  const kfEase = menuRef && menuKf !== null ? (channelsAt(menuRef.clip, menuKf).map((ch) => channelKeys(menuRef.clip, ch).find((k) => Math.abs(k.t - menuKf) <= KF_EPS)?.ease ?? DEFAULT_EASE)[0] ?? DEFAULT_EASE) : DEFAULT_EASE;
+  const keyframeMenuItems =
+    menuRef && menuKf !== null
+      ? [
+          { label: 'Go to keyframe', icon: <Crosshair />, onSelect: () => player.seek(menuRef.clip.start + Math.max(0, menuKf)) },
+          'separator' as const,
+          ...KEYFRAME_EASES.map((ease) => ({
+            label: EASE_LABELS[ease],
+            icon: ease === kfEase ? <Check /> : <span className="size-4" />,
+            onSelect: () => void edit([{ op: 'setKeyframeEase', clipId: menuRef.clip.id, t: menuKf, ease }], 'Keyframe easing'),
+          })),
+          'separator' as const,
+          { label: 'Delete keyframe', icon: <Trash2 />, danger: true, onSelect: () => void edit([{ op: 'removeKeyframe', clipId: menuRef.clip.id, t: menuKf }], 'Delete keyframe') },
+          {
+            label: 'Remove all animation',
+            icon: <Eraser />,
+            danger: true,
+            onSelect: () => void edit([{ op: 'clearKeyframes', clipId: menuRef.clip.id, keepAt: clamp(time() - menuRef.clip.start, 0, menuRef.clip.duration) }], 'Remove animation'),
+          },
+        ]
+      : null;
+
+  const clipMenuItems = keyframeMenuItems
+    ? keyframeMenuItems
+    : menuRef
     ? [
         { label: 'Split at playhead', shortcut: 'S', icon: <Scissors />, disabled: !(time() > menuRef.clip.start && time() < clipEnd(menuRef.clip)), onSelect: () => void edit([{ op: 'splitClip', clipId: menuRef.clip.id, at: time() }], 'Split clip') },
         {
@@ -790,6 +850,7 @@ export const Timeline: React.FC = () => {
           if (!open) {
             setMenuClip(null);
             setMenuTrack(null);
+            setMenuKf(null);
           }
         }}
       >
@@ -841,8 +902,13 @@ export const Timeline: React.FC = () => {
                           dragging={dragging}
                           locked={track.locked}
                           dimmed={false}
+                          kfDrag={kfDrag?.clipId === clip.id ? kfDrag : null}
                           onPointerDown={onClipPointerDown}
-                          onContextMenu={(_, c) => setMenuClip(c.id)}
+                          onContextMenu={(e, c) => {
+                            setMenuClip(c.id);
+                            const kf = (e.target as HTMLElement).closest('[data-kf-time]')?.getAttribute('data-kf-time');
+                            setMenuKf(kf != null ? Number(kf) : null);
+                          }}
                         />
                       );
                     })}
