@@ -43,8 +43,16 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 - **Smart reframe.** Face tracking keeps the speaker in frame when a crop is applied, for example when 16:9 footage goes into a 9:16 Short:
   - a locked crop when they stay put;
   - smooth camera moves when they move;
-  - a hard cut when the footage cuts.
+  - a hard cut when the footage cuts;
+  - in podcasts and interviews, a cut to whoever is talking, like a multicam edit, or one shot of everyone when they fit. It tells who is talking by watching each person's mouth while there's speech.
+
   It runs locally in about 30 ms per frame, automatically in **Make a Short**, or with **Track faces** in the Inspector.
+- **Motion tracking and face blur.**
+  - **Follow a face:** make a name label, sticker, picture-in-picture or blur follow a face, keeping its place relative to it.
+  - **Track what's under it:** follow whatever is under it, such as an object, a licence plate or a screen.
+  - **Blur faces:** one click blurs every face in a clip, with a soft blur that follows each person.
+  - **Blur box:** hide anything else you choose (Graphics → Effects).
+- **Proxies for heavy footage.** 4K, hour-long, HEVC (phone) and ProRes files get a light editing copy in the background, so scrubbing stays smooth and footage many browsers can't play becomes editable. Exports always use the originals.
 - **Edit by text.** The transcript follows playback word by word. Select words and press Delete to cut them from the video. One click removes every filler word or tightens long pauses, and a double-click fixes a misheard word.
 - **Pro timeline**:
   - Editing: move, trim, split, ripple delete, rubber-band selection, copy/paste at the playhead, Q/W ripple trims, frame nudges, J/K/L shuttle and jumps between edit points.
@@ -66,9 +74,9 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 | Layer | Tech |
 |---|---|
 | Composition & rendering | [Remotion](https://www.remotion.dev) 4 (React → video), FFmpeg, keyframe animation |
-| Vision | Local face detection (YuNet on ONNX Runtime) for smart reframing |
+| Vision | Local face detection with landmarks (YuNet on ONNX Runtime), talking detection and template-matching object tracking, for smart reframing, motion tracking and face blur |
 | Server | Node 20+, Hono, Server-Sent Events, Zod-validated project document |
-| Agent | Custom tool-calling loop (Claude-Code-style): 43 tools, skills, sub-agents, context compaction |
+| Agent | Custom tool-calling loop (Claude-Code-style): 45 tools, skills, sub-agents, context compaction |
 | LLM adapters | Native Anthropic, OpenAI-compatible and Gemini adapters (streaming, tool calls, vision) |
 | UI | React 19, Vite, Tailwind CSS 4, Zustand, Radix |
 | Integrations | MCP server (Streamable HTTP + stdio), MCP client, YouTube Data API |
@@ -208,7 +216,7 @@ You can drag media, templates and sounds from the left panel (or files from your
 
 ## Use it from Claude Code, Claude Desktop or Cursor (MCP)
 
-Cutroom is an MCP server with **44 tools**: the Director's 40 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
+Cutroom is an MCP server with **46 tools**: the Director's 42 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
 
 **Claude Code** (while the studio is running):
 
@@ -281,7 +289,7 @@ Everything stays on your computer in `data/` (override it with `DIRECTOR_DATA_DI
 data/settings.json                 your settings and keys (file mode 600; keys are masked in the UI)
 data/projects/<id>/project.json    the project document
 data/projects/<id>/chat.json       the Director conversation
-data/projects/<id>/media/          uploads, recordings, generated media, thumbnails, filmstrips, waveforms, transcripts
+data/projects/<id>/media/          uploads, recordings, generated media, thumbnails, filmstrips, waveforms, proxies, transcripts
 data/projects/<id>/renders/        exported MP4s, MP3s and SRTs
 data/skills/                       your own playbooks
 data/cache/                        render bundle, downloaded local models
@@ -316,9 +324,9 @@ bin/director.mjs        CLI
 src/shared/             project schema, timeline operations, templates catalog (used by server, UI and renderer)
 src/remotion/           the video composition: clips, effects, 28 templates, captions, code scenes, thumbnails
 src/server/             HTTP API, storage, media pipeline, rendering, services, agent, MCP
-src/server/agent/       Director loop, prompts, skills (Markdown), 43 tools
+src/server/agent/       Director loop, prompts, skills (Markdown), 45 tools
 src/web/                the editor UI
-assets/models/          bundled ONNX models (face detection for smart reframe)
+assets/models/          bundled ONNX models (face detection for smart reframe, tracking and face blur)
 tests/e2e/              browser test suites, fixtures and runner
 docs/ARCHITECTURE.md    how it all fits together
 ```
