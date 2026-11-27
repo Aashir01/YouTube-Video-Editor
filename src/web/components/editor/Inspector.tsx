@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Plus, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { AudioWaveform, Copy, MessageSquareText, MousePointerClick, Plus, ScanFace, Scissors, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import {
   CAPTION_PRESETS,
   EASINGS,
@@ -137,7 +137,6 @@ const FOCUS_PRESETS: { label: string; x: number; y: number }[] = [
   { label: 'Left', x: 0.2, y: 0.5 },
   { label: 'Right', x: 0.8, y: 0.5 },
   { label: 'Top', x: 0.5, y: 0.2 },
-  { label: 'Face', x: 0.5, y: 0.35 },
 ];
 
 /** Crop focus and static zoom: the controls for reframing (e.g. 16:9 footage in a 9:16 Short). */
@@ -164,6 +163,7 @@ const Reframe: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip
       }
     >
       <p className="-mt-1 text-[11px] leading-snug text-dim">Drag the picture in the preview to pan it. Zoom in to crop tighter.</p>
+      <TrackFacesButton clip={clip} />
       <RangeField label="Zoom" {...A.field('scale')} onChange={(v) => A.set({ scale: Math.round(v * 100) / 100 }, 'Zoom')} min={1} max={3} step={0.01} format={(v) => `${v.toFixed(2)}×`} />
       <div className="grid grid-cols-2 gap-2">
         <NumberField label="Focus X" {...A.field('focus.x')} min={0} max={1} step={0.01} />
@@ -181,6 +181,33 @@ const Reframe: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip
         ))}
       </div>
     </Section>
+  );
+};
+
+/** Smart reframe: find the speaker's face and keep it in frame (static or following them). */
+const TrackFacesButton: React.FC<{ clip: VideoClip | ImageClip }> = ({ clip }) => {
+  const projectId = useStudio((s) => s.projectId)!;
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn btn-sm"
+      disabled={busy}
+      title="Find the speaker's face and keep it in frame: a locked crop when they stay put, smooth moves when they move"
+      onClick={() => {
+        setBusy(true);
+        const t = toast.loading('Tracking faces…');
+        api
+          .runTool(projectId, 'auto_reframe', { clipIds: [clip.id] })
+          .then((r) => {
+            const line = r.text.split('\n').find((l) => l.startsWith(`- ${clip.id}: `))?.slice(clip.id.length + 4) ?? r.summary ?? 'Done';
+            toast.success(`Smart reframe: ${line}`, { id: t });
+          })
+          .catch((e) => toast.error(errorText(e), { id: t }))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <ScanFace className="size-3.5" /> {busy ? 'Tracking faces…' : 'Track faces (smart reframe)'}
+    </button>
   );
 };
 
