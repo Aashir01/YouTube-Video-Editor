@@ -305,7 +305,8 @@ Content is sent only to the services you configure: your LLM provider, and optio
 
 ```bash
 npm run dev         # server + Vite with hot reload on http://localhost:3333
-npm test            # unit + integration tests (timeline, ops, agent loop, LLM adapters, MCP, services)
+npm test            # unit + integration tests (timeline, ops, keyframes, reframe, agent loop, LLM adapters, MCP, services)
+npm run test:e2e    # browser tests of the whole app (needs FFmpeg + `npx playwright install chromium`; see tests/e2e)
 npm run typecheck
 npx tsx scripts/template-gallery.ts   # renders every template as stills into dist/gallery
 ```
@@ -318,6 +319,7 @@ src/server/             HTTP API, storage, media pipeline, rendering, services, 
 src/server/agent/       Director loop, prompts, skills (Markdown), 43 tools
 src/web/                the editor UI
 assets/models/          bundled ONNX models (face detection for smart reframe)
+tests/e2e/              browser test suites, fixtures and runner
 docs/ARCHITECTURE.md    how it all fits together
 ```
 
