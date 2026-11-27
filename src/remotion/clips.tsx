@@ -121,9 +121,12 @@ export const VideoView: React.FC<{ clip: VideoClip; trackMuted: boolean }> = ({ 
   const z = zoomAt(clip, frame / fps);
   const total = clipFrames(clip, fps).durationInFrames;
   const frameStyle = mediaFrameStyle(clip, z);
+  // footage with its background removed: the renderer keeps the transparency (PNG frames)
+  const transparent = Boolean(studio?.project.assets.find((a) => a.id === clip.assetId)?.meta.alpha);
   return (
     <OffthreadVideo
       src={src}
+      transparent={transparent}
       trimBefore={Math.round(clip.trimStart * fps)}
       playbackRate={clip.speed}
       muted={trackMuted || clip.muted || (clip.volume === 0 && !isAnimated(clip, 'volume'))}

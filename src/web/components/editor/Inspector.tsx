@@ -28,7 +28,7 @@ import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
 import { SchemaForm } from './SchemaForm';
 import { AnimationSection, useAnim } from './Keyframes';
-import { BlurEditor, BlurFacesButton, MotionTracking } from './Tracking';
+import { BackgroundSection, BlurEditor, BlurFacesButton, MotionTracking } from './Tracking';
 
 const FONT_OPTIONS = FONTS.map((f) => ({ value: f.id, label: f.family.replace(' Variable', '') }));
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace(/-/g, ' ') }));
@@ -694,6 +694,7 @@ export const Inspector: React.FC = () => {
         <Timing clip={clip} patch={patch} />
         {clip.type === 'video' && clip.multicam && <MulticamSection clip={clip} />}
         {clip.type === 'video' && <VideoEditor clip={clip} patch={patch} />}
+        {clip.type === 'video' && <BackgroundSection clip={clip} />}
         {clip.type === 'image' && <ImageEditor clip={clip} patch={patch} />}
         {clip.type === 'audio' && <AudioEditor clip={clip} patch={patch} />}
         {clip.type === 'text' && <TextEditor clip={clip} patch={patch} />}
