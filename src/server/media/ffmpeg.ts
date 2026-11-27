@@ -204,6 +204,27 @@ export const filmstrip = async (input: string, output: string, duration: number,
  * Browser recordings (MediaRecorder WebM) carry no duration in their header; a stream
  * copy into a fresh file writes it, so probing and seeking work. Returns false on failure.
  */
+/**
+ * A light editing copy: short side 540 px, H.264 with a keyframe every half second (snappy
+ * scrubbing), AAC audio, fast start. `onProgress` gets 0-1.
+ */
+export const makeProxy = async (input: string, output: string, size: { width: number; height: number }, duration: number, fps: number | undefined, onProgress?: (p: number) => void, signal?: AbortSignal): Promise<void> => {
+  const gop = Math.max(6, Math.round((fps ?? 30) / 2));
+  const tmp = `${output}.part.mp4`;
+  await must(
+    'ffmpeg',
+    ['-y', '-i', input, '-map', '0:v:0', '-map', '0:a:0?', '-vf', `scale=${size.width}:${size.height}:flags=bicubic,format=yuv420p`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '27', '-g', String(gop), '-keyint_min', String(gop), '-sc_threshold', '0', '-c:a', 'aac', '-b:a', '96k', '-ac', '2', '-movflags', '+faststart', '-stats_period', '0.5', tmp],
+    {
+      signal,
+      onStderrLine: (line) => {
+        const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
+        if (m && duration > 0) onProgress?.(Math.min(0.99, (Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) / duration));
+      },
+    },
+  );
+  await fsp.rename(tmp, output);
+};
+
 export const remuxInPlace = async (file: string): Promise<boolean> => {
   const tmp = `${file}.remux${path.extname(file)}`;
   const r = await runFf('ffmpeg', ['-y', '-i', file, '-c', 'copy', tmp], { timeoutMs: 10 * 60_000 });

@@ -16,7 +16,7 @@ interface Settings {
   speech: Record<string, string | boolean>;
   keys: Record<string, string | undefined>;
   images: { engine: string; openaiModel: string; geminiModel: string };
-  render: { quality: string; concurrency?: number; browserExecutable: string };
+  render: { quality: string; concurrency?: number; browserExecutable: string; proxies?: string };
   agent: { autonomy: string; maxSteps: number; visualQa: boolean };
   mcpServers: Record<string, unknown>;
   youtube: { clientId: string; clientSecret: string; refreshToken: string; channelTitle: string };
@@ -476,6 +476,17 @@ const RenderSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ 
         </div>
         <Field label="Browser executable (optional)" hint="Use a local Chrome/Chromium instead of the one Remotion downloads.">
           <input className="field font-mono text-xs" value={s.render.browserExecutable} onChange={(e) => set({ ...s, render: { ...s.render, browserExecutable: e.target.value } })} placeholder="/path/to/chrome" />
+        </Field>
+        <Field label="Editing proxies" hint="Light copies of heavy footage (HEVC/ProRes, above 1080p, or over 20 minutes) for smooth editing. Exports always use the originals.">
+          <SelectField
+            value={s.render.proxies ?? 'auto'}
+            onChange={(v) => set({ ...s, render: { ...s.render, proxies: v } })}
+            options={[
+              { value: 'auto', label: 'Automatic: big or unusual footage' },
+              { value: 'always', label: 'Always, for every video' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
         </Field>
       </Card>
       {system && (

@@ -375,6 +375,7 @@ export const AssetSchema = z.object({
     .object({ file: z.string(), count: z.number(), interval: z.number(), tileW: z.number(), tileH: z.number() })
     .optional()
     .describe('Sprite of evenly spaced frames for the timeline'),
+  proxy: z.object({ file: z.string(), width: z.number(), height: z.number() }).optional().describe('Light copy for smooth editing; renders use the original'),
   transcript: z
     .object({
       status: z.enum(['none', 'pending', 'done', 'error']).default('none'),

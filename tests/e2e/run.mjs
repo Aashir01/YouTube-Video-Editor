@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
-const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'agent', 'keyframes', 'reframe', 'tracking'];
+const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'agent', 'keyframes', 'reframe', 'tracking', 'proxies'];
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const picked = args.filter((a) => !a.startsWith('--'));
