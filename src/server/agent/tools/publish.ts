@@ -104,11 +104,11 @@ export const createShortTool = defineTool({
   name: 'create_short',
   category: 'publish',
   description:
-    'Repurpose part of this video as a YouTube Short: cuts the given timeline ranges (seconds; several ranges are joined in order) into a NEW 9:16 project. Graphics, voice and captions stay in sync, full-frame footage is reframed around focusX (0-1, where the subject is), music is trimmed, auto captions and #shorts metadata are added. The current project is not changed. Choose self-contained, hooky moments (20–60s) that start on a strong line; use get_transcript to find them. Returns the new project id.',
+    'Repurpose part of this video as a YouTube Short: cuts the given timeline ranges (seconds; several ranges are joined in order) into a NEW 9:16 project. Graphics, voice and captions stay in sync, full-frame footage is reframed on the speaker’s face automatically (focusX 0-1 forces a fixed crop instead), music is trimmed, auto captions and #shorts metadata are added. The current project is not changed. Choose self-contained, hooky moments (20–60s) that start on a strong line; use get_transcript to find them. Returns the new project id.',
   schema: z.object({
     ranges: z.array(z.tuple([z.number().min(0), z.number().min(0)])).min(1).max(20),
     title: z.string().max(100).optional(),
-    focusX: z.number().min(0).max(1).optional(),
+    focusX: z.number().min(0).max(1).optional().describe('Force a fixed horizontal crop (turns off face tracking)'),
   }),
   execute: async (input, ctx) => {
     const short = await createShort(ctx.projectId, input.ranges, { title: input.title, focusX: input.focusX });
