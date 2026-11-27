@@ -8,7 +8,7 @@ import { addCaptions, addMedia, addScene, applyEdits, autoCut } from './edit';
 import { addLibrarySound, generateAudio, generateImageTool, importStock, searchStockTool } from './generate';
 import { listTemplates, writeCodeScene } from './motion';
 import { previewFrames } from './review';
-import { createShortTool, designThumbnail, renderVideo, setYouTubeMetadata } from './publish';
+import { createShortTool, designThumbnail, findShorts, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
 import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
@@ -58,6 +58,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   setYouTubeMetadata,
   designThumbnail,
   renderVideo,
+  findShorts,
   createShortTool,
   uploadToYouTube,
 ];

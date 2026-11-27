@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURES_VERSION = 3;
+const FIXTURES_VERSION = 4;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(process.argv[2] ?? path.join(here, '.fixtures'));
 const portrait = path.join(here, 'fixtures', 'portrait.jpg');
@@ -27,6 +27,8 @@ const run = (name, args) => {
 
 // a 20 s talking-head stand-in: moving test pattern with a tone
 run('talk.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=1280x720:r=30:d=20', '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=44100:duration=20', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);
+// a 100 s talk to find Shorts in (small, so it builds fast)
+run('talk-long.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=30:d=100', '-f', 'lavfi', '-i', 'sine=frequency=200:sample_rate=44100:duration=100', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);
 // a 6 s voice/music stand-in
 run('voice.m4a', ['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100:duration=6', '-c:a', 'aac', '-ac', '1']);
 // a solid picture for picture-in-picture

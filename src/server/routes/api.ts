@@ -23,6 +23,7 @@ import { listModels, testModel } from '../ai/llm';
 import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
 import { createShort } from '../shorts';
+import { findMoments, momentsAreCurrent, readMoments, shortFromMoment } from '../moments';
 import { importOptional } from '../optional';
 
 export const api = new Hono();
@@ -150,6 +151,23 @@ api.post('/projects/:id/shorts', async (c) => {
   const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
   return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
 });
+
+/** Find Shorts: the moments the AI picked (and whether the edit changed since). */
+api.get('/projects/:id/moments', async (c) => {
+  const id = c.req.param('id');
+  const state = await readMoments(id);
+  return c.json({ state, current: state ? await momentsAreCurrent(id, state) : true });
+});
+
+api.post('/projects/:id/moments', async (c) => {
+  const body = z
+    .object({ count: z.number().int().min(1).max(12).optional(), minSec: z.number().min(5).max(170).optional(), maxSec: z.number().min(10).max(180).optional(), focus: z.string().max(300).optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  const state = await findMoments(c.req.param('id'), body);
+  return c.json({ state, current: true });
+});
+
+api.post('/projects/:id/moments/:momentId/short', async (c) => c.json(await shortFromMoment(c.req.param('id'), c.req.param('momentId'))));
 
 api.post('/projects/:id/ops', async (c) => {
   const id = c.req.param('id');

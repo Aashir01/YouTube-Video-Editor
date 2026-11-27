@@ -48,3 +48,5 @@ export const transcriptionQueue = new JobQueue(1);
 export const generationQueue = new JobQueue(3);
 /** proxies are heavy encodes: one at a time */
 export const proxyQueue = new JobQueue(1);
+/** AI utility work outside the Director (finding Shorts, translating subtitles). */
+export const aiQueue = new JobQueue(2);
