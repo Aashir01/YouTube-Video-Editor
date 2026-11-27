@@ -33,6 +33,7 @@ npm run test:e2e -- --keep             # keep the temporary data folder afterwar
 | `reframe` | Smart reframe on moving and cutting faces and on a two-person conversation, re-checked on rendered frames; Track faces; Make a Short |
 | `tracking` | Blur faces (re-checked with the face detector on renders), a label following a face, a blur box tracking what is under it, the Blur box card |
 | `background` | Remove background (person, from the Inspector) and a green screen (`remove_background`, color found automatically), re-checked on rendered frames; restoring the original; a blurred original behind |
+| `footage` | Stabilize (shake measured with the app's tracker before and after), a `.cube` color look from the Inspector and at half strength, beats of a drum loop, cutting pictures to the beat (menu and `cut_to_beat`), restoring the original |
 | `multicam` | Sync three cameras and a mic by sound, cut to whoever talks (by mouths or by one mic per person), rendered frames, switching cameras by key, menu and Inspector, `create_multicam` and `switchAngle` over MCP |
 | `proxies` | Automatic proxies for 1440p and HEVC footage, playback through them, switching to originals, removing and re-creating, the "off" setting |
 

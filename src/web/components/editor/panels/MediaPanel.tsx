@@ -271,7 +271,7 @@ const ProjectMedia: React.FC = () => {
           type="file"
           multiple
           hidden
-          accept="video/*,audio/*,image/*,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.srt,.vtt,.html,.htm,.xml,.yaml,.yml,.rtf"
+          accept="video/*,audio/*,image/*,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.srt,.vtt,.html,.htm,.xml,.yaml,.yml,.rtf,.cube"
           onChange={(e) => {
             void upload([...(e.target.files ?? [])]);
             e.target.value = '';

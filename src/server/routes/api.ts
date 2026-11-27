@@ -27,6 +27,7 @@ import { findMoments, momentsAreCurrent, readMoments, shortFromMoment } from '..
 import { applyMulticam, planMulticam } from '../multicam';
 import { readTranslations, removeLanguage, subtitleSource, subtitlesSrt, translateSubtitles } from '../subtitles';
 import { createDub } from '../dub';
+import { beatsFor } from '../footage';
 import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
@@ -186,6 +187,12 @@ api.get('/projects/:id/subtitles/:file', async (c) => {
   const srt = await subtitlesSrt(id, lang);
   const name = `${p.name.replace(/[^\w\- ]+/g, '').trim() || 'subtitles'}.${lang}.srt`;
   return new Response(srt, { headers: { 'Content-Type': 'application/x-subrip; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` } });
+});
+
+/** Find the beats of a music file (kept with the asset: the timeline shows them and snaps to them). */
+api.post('/projects/:id/assets/:assetId/beats', async (c) => {
+  const r = await beatsFor(c.req.param('id'), c.req.param('assetId'));
+  return c.json({ tempo: r.tempo, beats: r.beats.length });
 });
 
 /** A dubbed copy of the project in another language. */

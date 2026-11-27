@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURES_VERSION = 7;
+const FIXTURES_VERSION = 8;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(process.argv[2] ?? path.join(here, '.fixtures'));
 const portrait = path.join(here, 'fixtures', 'portrait.jpg');
@@ -82,6 +82,15 @@ const still = (name, bg, size) =>
   ]);
 still('talkhead.mp4', '0x777777', 720);
 still('greenscreen.mp4', '0x00B140', 560);
+
+// shaky handheld footage: a still picture seen through a crop window that wobbles every frame
+run('shaky.mp4', [
+  '-loop', '1', '-i', portrait, '-f', 'lavfi', '-i', 'sine=frequency=250:sample_rate=44100:duration=4',
+  '-filter_complex', "[0]scale=1600:1600,crop=1280:720:'160+24*sin(t*17)+18*sin(t*7.3)':'400+20*cos(t*13)+14*sin(t*5.1)'[v]",
+  '-map', '[v]', '-map', '1:a', '-r', '30', '-t', '4', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1',
+]);
+// a 120 BPM drum loop: kicks at 0.25 s + k·0.5 s, hi-hats in between
+run('beat.m4a', ['-f', 'lavfi', '-i', "aevalsrc='0.9*sin(2*PI*70*t)*exp(-mod(t+0.25\\,0.5)*25)+0.25*(random(0)*2-1)*exp(-mod(t\\,0.5)*60)':s=44100:d=12", '-c:a', 'aac', '-ac', '1']);
 
 // heavy footage for the proxy tests: 1440p H.264, and HEVC when this FFmpeg can encode it (iPhone-style)
 run('big.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=2560x1440:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);

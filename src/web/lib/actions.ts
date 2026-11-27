@@ -46,6 +46,19 @@ export const cutToCamera = (angle: number): boolean => {
   return true;
 };
 
+/** Re-time clips so they change on the beat of the music. */
+export const cutToBeat = async (clipIds: string[]) => {
+  const { projectId } = useStudio.getState();
+  if (!projectId || clipIds.length === 0) return;
+  const t = toast.loading('Cutting to the beat…');
+  try {
+    const r = await api.runTool(projectId, 'cut_to_beat', { clipIds });
+    toast.success(`Cut to the beat: ${r.summary ?? 'done'}`, { id: t });
+  } catch (err) {
+    toast.error(errorText(err), { id: t });
+  }
+};
+
 /** Multicam: show another camera in a whole cut. */
 export const switchClipCamera = (clipId: string, angle: number) => void useStudio.getState().edit([{ op: 'switchAngle', clipId, angle }], `Camera ${angle + 1}`);
 

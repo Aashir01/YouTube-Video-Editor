@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Crosshair, EyeOff, Eraser, ScanFace, Undo2, UserRound } from 'lucide-react';
+import { Crosshair, EyeOff, Eraser, Palette, ScanFace, Undo2, Upload, UserRound, Vibrate } from 'lucide-react';
 import type { BlurClip, Clip, VideoClip } from '../../../shared/schema';
 import { baseVideoFor } from '../../../shared/motion';
 import { api } from '../../lib/api';
 import { useStudio } from '../../lib/store';
 import { errorText } from '../../lib/utils';
-import { NumberField, RangeField, Section, Segmented, Switch } from '../ui';
+import { NumberField, RangeField, Section, Segmented, SelectField, Switch } from '../ui';
+import { useUpload } from './panels/MediaPanel';
 import { useAnim } from './Keyframes';
 
 type Patch = (p: Record<string, unknown>) => void;
@@ -125,6 +126,61 @@ export const BackgroundSection: React.FC<{ clip: VideoClip }> = ({ clip }) => {
           <Switch checked={blurBehind} onChange={setBlurBehind} label="Blurred original behind (portrait mode)" />
         </>
       )}
+    </Section>
+  );
+};
+
+/** Stabilize shaky footage and apply a color look from a .cube LUT (both as processed copies). */
+export const FootageSection: React.FC<{ clip: VideoClip }> = ({ clip }) => {
+  const project = useStudio((s) => s.project!);
+  const asset = project.assets.find((a) => a.id === clip.assetId);
+  const luts = project.assets.filter((a) => /\.cube$/i.test(a.file));
+  const { busy, run } = useToolRun();
+  const { upload, progress } = useUpload();
+  const [strength, setStrength] = useState<'light' | 'medium' | 'strong'>('medium');
+  const [lut, setLut] = useState('');
+  const [intensity, setIntensity] = useState(1);
+  const file = useRef<HTMLInputElement>(null);
+  const derived = asset?.derived?.kind === 'stabilized' || asset?.derived?.kind === 'lut' ? asset.derived : null;
+  const chosen = lut || luts[0]?.id || '';
+  if (clip.multicam) return null;
+  return (
+    <Section title="Footage" defaultOpen={Boolean(derived)}>
+      {derived && (
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-black/20 px-2 py-1.5 text-[11px] text-muted">
+          <span className="flex-1">{derived.kind === 'stabilized' ? `Stabilized: ${derived.note ?? ''}` : `Color look: ${derived.note ?? ''}`}</span>
+          <button className="btn btn-sm" disabled={busy !== null} onClick={() => run('restore', 'remove_background', { clipId: clip.id, mode: 'restore' }, 'Restoring…', 'Original')}>
+            <Undo2 className="size-3.5" /> Restore the original
+          </button>
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <Segmented size="sm" className="flex-1" value={strength} onChange={setStrength} options={(['light', 'medium', 'strong'] as const).map((v) => ({ value: v, label: v[0]!.toUpperCase() + v.slice(1) }))} />
+        <button className="btn btn-sm" disabled={busy !== null} onClick={() => run('stab', 'stabilize_video', { clipId: clip.id, strength }, 'Stabilizing (two passes)…', 'Stabilized')}>
+          <Vibrate className="size-3.5" /> Stabilize
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <SelectField className="flex-1" value={chosen} onChange={setLut} placeholder={luts.length ? undefined : 'Import a .cube LUT…'} options={luts.map((a) => ({ value: a.id, label: a.name }))} />
+        <button className="btn btn-sm btn-icon" title="Import a .cube LUT" aria-label="Import a .cube LUT" disabled={progress !== null} onClick={() => file.current?.click()}>
+          <Upload className="size-3.5" />
+        </button>
+        <input
+          ref={file}
+          type="file"
+          accept=".cube"
+          hidden
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = '';
+            void upload(files).then((added) => added[0] && setLut(added[0].id));
+          }}
+        />
+      </div>
+      <RangeField label="Look strength" value={intensity} min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setIntensity} />
+      <button className="btn btn-sm" disabled={busy !== null || !chosen} onClick={() => run('lut', 'apply_lut', { clipId: clip.id, lutAssetId: chosen, intensity }, 'Applying the color look…', 'Color look')}>
+        <Palette className="size-3.5" /> Apply the look
+      </button>
     </Section>
   );
 };

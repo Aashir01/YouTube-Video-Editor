@@ -14,6 +14,7 @@ import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
 import { createMulticam } from './multicam';
 import { removeBackgroundTool } from './background';
+import { applyLutTool, cutToBeatTool, stabilizeTool } from './footage';
 import { createDubTool, translateSubtitlesTool } from './languages';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
@@ -41,6 +42,9 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   trackMotion,
   createMulticam,
   removeBackgroundTool,
+  stabilizeTool,
+  applyLutTool,
+  cutToBeatTool,
   webSearchTool,
   fetchUrl,
   writeScript,

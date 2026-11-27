@@ -5,17 +5,12 @@
  * of the source the clip uses is processed.
  */
 import { spawn } from 'node:child_process';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { uid } from '../shared/ids';
 import { hex, maskToAlpha, screenColor, steadyMask, toModelInput, toRgba } from '../shared/matte';
-import { addTrack, findClip, placeClip } from '../shared/timeline';
-import type { Asset, ClipInput, Project, VideoClip } from '../shared/schema';
-import { analysisQueue } from './jobs';
+import { addTrack, placeClip } from '../shared/timeline';
+import type { Asset, ClipInput } from '../shared/schema';
+import { bakeClip, videoSource, type Report } from './bake';
 import { readFrames } from './media/faces';
 import { ff, runFf } from './media/ffmpeg';
-import { registerAsset } from './media/ingest';
 import { loadSegmenter, segmenterFor } from './media/segment';
 import { store } from './storage/projects';
 
@@ -31,24 +26,11 @@ export interface BackgroundOptions {
   signal?: AbortSignal;
 }
 
-type Report = (progress: number, detail?: string) => void;
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
 const VP9_ALPHA = ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-crf', '30', '-b:v', '0'];
-
-const clipOf = (p: Project, clipId: string) => findClip(p, clipId)?.clip;
-
-const sourceOf = (p: Project, clipId: string) => {
-  const ref = clipOf(p, clipId);
-  if (!ref || ref.type !== 'video') throw new Error('Pick a video clip');
-  if (ref.multicam) throw new Error('This is a multicam cut: remove the background of the camera files before making the multicam edit');
-  const asset = p.assets.find((a) => a.id === ref.assetId);
-  if (!asset?.meta.duration || !asset.meta.width || !asset.meta.height) throw new Error('The video is still being analyzed; try again in a moment');
-  if (asset.derived?.kind === 'background' || asset.derived?.kind === 'greenscreen') throw new Error('This clip already has its background removed');
-  return { clip: ref as VideoClip, asset };
-};
 
 /** The person, frame by frame: model mask -> steadied -> soft alpha -> RGBA into the encoder. */
 const keyPerson = async (file: string, asset: Asset, from: number, to: number, size: { w: number; h: number }, out: string, report: Report, signal?: AbortSignal) => {
@@ -125,84 +107,49 @@ export interface BackgroundResult {
 
 /** Process the clip's part of its video and switch the clip to the result (one undo step). */
 export const removeBackground = async (projectId: string, clipId: string, opts: BackgroundOptions, source: 'user' | 'agent' | 'mcp' = 'user'): Promise<BackgroundResult> => {
-  const p = await store.get(projectId);
-  const { clip, asset } = sourceOf(p, clipId);
-  const file = store.mediaPath(projectId, asset.file);
-  const from = Math.max(0, clip.trimStart - 0.5);
-  const to = Math.min(asset.meta.duration!, clip.trimStart + clip.duration * clip.speed + 0.5);
-  // at most 1920 on the long side and 1080 on the short one
-  const scale = Math.min(1, 1920 / Math.max(asset.meta.width!, asset.meta.height!), 1080 / Math.min(asset.meta.width!, asset.meta.height!));
-  const size = { w: even(asset.meta.width! * scale), h: even(asset.meta.height! * scale) };
-  const tmp = path.join(os.tmpdir(), `cutroom-matte-${uid('m')}.webm`);
-  let color = opts.color;
-  try {
-    await analysisQueue.add(projectId, opts.mode === 'person' ? 'Removing the background' : 'Removing the green screen', async (report) => {
-      if (opts.mode === 'person') await keyPerson(file, asset, from, to, size, tmp, report, opts.signal);
-      else {
+  const { asset } = videoSource(await store.get(projectId), clipId);
+  if (asset.derived?.kind === 'background' || asset.derived?.kind === 'greenscreen') throw new Error('This clip already has its background removed');
+  const person = opts.mode === 'person';
+  const r = await bakeClip(
+    projectId,
+    clipId,
+    {
+      kind: person ? 'background' : 'greenscreen',
+      label: person ? 'Remove background' : 'Remove green screen',
+      suffix: person ? 'no background' : 'keyed',
+      ext: '.webm',
+      alpha: true,
+      run: async ({ file, asset: a, clip, from, to, size, out, report, signal }) => {
+        if (person) return void (await keyPerson(file, a, from, to, size, out, report, signal));
+        let color = opts.color;
         if (!color || color === 'auto') {
+          const h = even((160 * size.h) / size.w);
           let first: Uint8Array | null = null;
-          await readFrames(file, 160, even((160 * size.h) / size.w), clip.trimStart, clip.trimStart + 0.2, 5, async (_t, f) => void (first ??= Uint8Array.from(f)), opts.signal);
+          await readFrames(file, 160, h, clip.trimStart, clip.trimStart + 0.2, 5, async (_t, f) => void (first ??= Uint8Array.from(f)), signal);
           if (!first) throw new Error('Could not read the video');
-          color = hex(screenColor(first, 160, even((160 * size.h) / size.w)));
+          color = hex(screenColor(first, 160, h));
         }
         if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error(`"${color}" is not a color like #00b140`);
-        await keyScreen(file, from, to, size, tmp, color.toLowerCase(), Math.min(0.6, Math.max(0.05, opts.similarity ?? 0.3)), report, opts.signal);
-      }
-    });
-    const base = asset.name.replace(/\.[^.]+$/, '');
-    const made = await registerAsset(projectId, {
-      sourcePath: tmp,
-      originalName: `${base} (${opts.mode === 'person' ? 'no background' : 'keyed'}).webm`,
-      origin: 'processed',
-      alpha: true,
-      derived: { from: asset.id, kind: opts.mode === 'person' ? 'background' : 'greenscreen', offset: r3(from), ...(color ? { note: color } : {}) },
-      label: 'Add video without background',
-      updateSource: source,
-    });
-    let behind = '';
-    await store.update(
-      projectId,
-      opts.mode === 'person' ? 'Remove background' : 'Remove green screen',
-      (d) => {
-        const c = clipOf(d, clipId);
-        if (!c || c.type !== 'video') return;
-        c.assetId = made.id;
-        c.trimStart = r3(c.trimStart - from);
-        if (opts.behind === 'blur') {
-          // the original, blurred and a touch larger (no soft edges), underneath everything
-          const track = addTrack(d, { name: 'Background', kind: 'video', index: 0 });
-          placeClip(d, { id: '', type: 'video', assetId: asset.id, start: c.start, duration: c.duration, trimStart: r3(c.trimStart + from), speed: c.speed, volume: 0, scale: 1.08, grade: { blur: 28 } } as ClipInput, { trackId: track.id });
-          behind = ' with a blurred copy of the original behind it';
-        }
+        await keyScreen(file, from, to, size, out, color.toLowerCase(), Math.min(0.6, Math.max(0.05, opts.similarity ?? 0.3)), report, signal);
+        return color.toLowerCase();
       },
-      { source },
-    );
-    return {
-      assetId: made.id,
-      summary: `${opts.mode === 'person' ? 'removed the background' : `keyed out the screen (${color})`} of ${(to - from).toFixed(1)}s of ${asset.name}${behind}; what is behind it now shows through`,
-    };
-  } finally {
-    await fsp.rm(tmp, { force: true }).catch(() => undefined);
-  }
+      after:
+        opts.behind === 'blur'
+          ? (d, c, original, offset) => {
+              // the original, blurred and a touch larger (no soft edges), underneath everything
+              const track = addTrack(d, { name: 'Background', kind: 'video', index: 0 });
+              placeClip(d, { id: '', type: 'video', assetId: original.id, start: c.start, duration: c.duration, trimStart: r3(c.trimStart + offset), speed: c.speed, volume: 0, scale: 1.08, grade: { blur: 28 } } as ClipInput, { trackId: track.id });
+              return ' with a blurred copy of the original behind it';
+            }
+          : undefined,
+    },
+    source,
+    opts.signal,
+  );
+  return {
+    assetId: r.asset.id,
+    summary: `${person ? 'removed the background' : `keyed out the screen (${r.note})`} of ${r.seconds.toFixed(1)}s of ${asset.name}${r.extra}; what is behind it now shows through`,
+  };
 };
 
-/** Show the original video in the clip again. */
-export const restoreOriginal = async (projectId: string, clipId: string, source: 'user' | 'agent' | 'mcp' = 'user') => {
-  const p = await store.get(projectId);
-  const c = clipOf(p, clipId);
-  if (!c || c.type !== 'video') throw new Error('Pick a video clip');
-  const derived = p.assets.find((a) => a.id === c.assetId)?.derived;
-  if (!derived) throw new Error('This clip already shows its original video');
-  await store.update(
-    projectId,
-    'Restore original video',
-    (d) => {
-      const clip = clipOf(d, clipId);
-      if (clip?.type !== 'video') return;
-      clip.assetId = derived.from;
-      clip.trimStart = r3(clip.trimStart + derived.offset);
-    },
-    { source },
-  );
-  return { summary: 'the clip shows its original video again' };
-};
+export { restoreOriginal } from './bake';
