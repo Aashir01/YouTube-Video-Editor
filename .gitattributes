@@ -1,0 +1,5 @@
+# launchers: Windows batch files need CRLF, shell scripts LF
+*.bat text eol=crlf
+*.sh text eol=lf
+*.command text eol=lf
+*.onnx binary

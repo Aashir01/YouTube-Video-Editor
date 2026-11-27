@@ -37,8 +37,10 @@ const ensureWebBuild = () => {
   const index = path.join(root, 'dist', 'web', 'index.html');
   const stale = !fs.existsSync(index) || newestMtime(path.join(root, 'src', 'web')) > fs.statSync(index).mtimeMs || newestMtime(path.join(root, 'src', 'remotion')) > fs.statSync(index).mtimeMs;
   if (!stale) return;
-  console.log('Building the editor UI (first run or after an update)…');
   const vite = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
+  // production installs (e.g. the Docker image) ship a built UI without the build tools
+  if (!fs.existsSync(vite) && fs.existsSync(index)) return;
+  console.log('Building the editor UI (first run or after an update)…');
   const r = spawnSync(process.execPath, [vite, 'build', '--logLevel', 'warn'], { cwd: root, stdio: 'inherit' });
   if (r.status !== 0) {
     console.error('UI build failed.');

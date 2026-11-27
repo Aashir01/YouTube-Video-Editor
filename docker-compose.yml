@@ -1,0 +1,21 @@
+# Cutroom: run `docker compose up -d`, then open http://localhost:3333
+name: cutroom
+services:
+  cutroom:
+    build: .
+    image: cutroom:latest
+    ports:
+      # only this computer can open it; use "3333:3333" to share it on your network (it has no login)
+      - "127.0.0.1:3333:3333"
+    volumes:
+      - cutroom-data:/data
+    env_file:
+      # optional: API keys such as OPENAI_API_KEY or GEMINI_API_KEY (see .env.example)
+      - path: .env
+        required: false
+    # Chrome needs more shared memory than Docker's 64 MB default to render video
+    shm_size: "1gb"
+    restart: unless-stopped
+
+volumes:
+  cutroom-data:

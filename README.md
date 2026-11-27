@@ -69,25 +69,45 @@ The editor UI, the AI agent and MCP clients all edit the **same project document
 
 ## Quick start
 
-### 1. Requirements
+### 1. Install and run (pick one)
 
-- **Node.js 20.19 or newer** (22 LTS recommended): <https://nodejs.org>
-- **FFmpeg** (recommended; a bundled fallback covers most features):
-  - macOS: `brew install ffmpeg`
-  - Windows: `winget install Gyan.FFmpeg`
-  - Ubuntu/Debian: `sudo apt install ffmpeg`
-- About 1 GB of disk space. On the first render, Remotion downloads a headless Chrome (~100 MB) unless you point it at an installed Chrome (Settings → Rendering).
+**One click** (Windows, macOS, Linux). Download the project (**Code → Download ZIP** on GitHub, then unzip it, or `git clone` it). Then:
 
-### 2. Install and run
+| System | Start it with |
+|---|---|
+| Windows | double-click **`Cutroom.bat`** |
+| macOS | double-click **`Cutroom.command`** (the first time: right-click it, choose **Open**, then **Open**) |
+| Linux | run **`./cutroom.sh`** |
+
+The first run sets everything up, which takes a few minutes:
+- **Node.js:** installed if it's missing. Windows uses winget. macOS and Linux get a private, checksum-verified copy inside the folder, with no admin rights needed.
+- **Packages:** the app's packages are installed.
+- **Editor:** the editor is built.
+
+Cutroom then opens in your browser. Later starts take a second; close the window to stop it.
+
+**Docker.** If you have Docker, this is everything:
 
 ```bash
-git clone https://github.com/Aashir01/YouTube-Video-Editor.git director-studio
-cd director-studio
+docker compose up -d     # then open http://localhost:3333
+```
+
+Your projects and settings live in the `cutroom_cutroom-data` volume. API keys can go in a `.env` file next to `docker-compose.yml`, or into Settings. FFmpeg and the render browser come inside the image. By default only your own computer can open it.
+
+**From source** (for development): Node.js 20.19+ ([nodejs.org](https://nodejs.org)), then:
+
+```bash
+git clone https://github.com/Aashir01/YouTube-Video-Editor.git cutroom
+cd cutroom
 npm install
 npm start          # builds the UI on first run, then opens http://localhost:3333
 ```
 
-Run `npm run doctor` any time to check FFmpeg, the render browser, your AI model and the optional local engines.
+### 2. Good to know
+
+- **FFmpeg** is recommended for the one-click and source installs: `brew install ffmpeg` (macOS), `winget install Gyan.FFmpeg` (Windows) or `sudo apt install ffmpeg` (Linux). A bundled fallback covers most features without it.
+- **Disk space:** about 1.5 GB. On the first render, Remotion downloads a headless Chrome (~100 MB) unless you point it at an installed Chrome (Settings → Rendering).
+- **Checking your setup:** run `npm run doctor` any time to check FFmpeg, the render browser, your AI model and the optional local engines.
 
 ### 3. Connect an AI model
 
