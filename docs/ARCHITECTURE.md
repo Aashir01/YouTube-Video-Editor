@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 42 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 43 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -25,6 +25,7 @@ Conventions:
 - **Positions and boxes** are fractions of the canvas (0..1), so layouts survive aspect changes such as 16:9 → 9:16.
 - **Sizes** (fonts, radii, strokes) are *design px*: 1 unit = 1 px when the short side is 1080 px. They scale automatically for 720p, 4K or vertical video.
 - **Reframing**: video and image clips have `focus` (the point of the source kept in view, 0..1) and `scale` (zoom). This is how footage is panned inside a frame, and how a 16:9 shot is reframed for 9:16.
+- **Keyframes**: any clip can carry `keyframes: { channel: [{ t, v, ease? }] }`. Here `t` is in seconds from the clip start, and an animated channel overrides its static field (see "Keyframe animation" below).
 
 Main parts:
 
@@ -45,7 +46,7 @@ Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX.
 
 ## 2. Edits, history and live sync
 
-`src/shared/ops.ts` defines `EditOp`: `addClip`, `updateClip`, `moveClip`, `trimClip`, `splitClip`, `removeClips` (optionally ripple), `rippleDelete`, `liftRange` (clear a range, keep the gap), `shiftClips`, `closeGaps`, `addMarker` / `updateMarker` / `removeMarker`, track ops, `setBrief` / `setBrand` / `setCanvas` / `setYoutube` / `setScript` / `setAudioMix`, and asset ops. `applyOps` mutates a draft and throws readable errors (overlaps, locked tracks, invalid template props, media bounds).
+`src/shared/ops.ts` defines `EditOp`: `addClip`, `updateClip`, `moveClip`, `trimClip`, `splitClip`, `removeClips` (optionally ripple), `rippleDelete`, `liftRange` (clear a range, keep the gap), `shiftClips`, `closeGaps`, `addMarker` / `updateMarker` / `removeMarker`, keyframe ops (`setKeyframe`, `removeKeyframe`, `clearKeyframes`, `moveKeyframes`, `setKeyframeEase`), track ops, `setBrief` / `setBrand` / `setCanvas` / `setYoutube` / `setScript` / `setAudioMix`, and asset ops. `applyOps` mutates a draft and throws readable errors (overlaps, locked tracks, invalid template props, media bounds).
 
 - **Server**: `ProjectStore.update(id, label, mutator)` serializes writes per project, validates the result, stores an undo snapshot, keeps "follower" clips attached to the end (auto captions, looping music), saves atomically and emits a `project` event.
 - **UI**: the Zustand store applies the same `applyOps` locally for instant feedback, then sends the ops. Requests are chained so the server sees them in order; the response from the latest one wins. Typing and sliders use `editSoon`, which merges patches per field and flushes after a pause, so a drag creates one undo step.
@@ -68,6 +69,24 @@ Because every change goes through the same ops, an edit made by the user, the Di
 
 The same composition runs in the editor (Remotion Player), the agent's QA frames (`renderStill`) and the final render.
 
+### Keyframe animation
+
+`src/shared/keyframes.ts` is the one model behind every animation:
+- **Channels:** it defines the animatable channels per clip type.
+  - video/image: `box.x/y/w/h`, `focus.x/y`, `scale`, `opacity`, `rotation`, plus `volume` on video;
+  - text: `x`, `y`, `style.size`, `opacity`, `rotation`;
+  - audio: `volume`.
+- **Interpolation:** easing applies per segment (`linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`).
+- **Edit helpers:** set, remove, clear, move and re-ease keys, shared by the ops, the editor and the agent tools.
+
+How it works:
+- **Rendering:** `Main.tsx` wraps each visual clip in `Animated`, which evaluates `animateClip(clip, frame / fps)`. The clip views therefore render an ordinary clip whose fields already hold this frame's values. Volume curves call `channelAt` inside Remotion's per-frame `volume` callback.
+- **Timeline edits keep the motion in place:**
+  - Split pieces shift their keys and keep the nearest out-of-range key on each side, so the motion is continuous across the cut.
+  - Start-trims shift video and audio keys so they stay on the same footage. Graphics keep theirs relative to the clip start.
+  - Speed changes stretch key times.
+- **Editor:** a channel with keys is "animated". Editing its value in the Inspector or on the canvas upserts a key at the playhead (auto-key) instead of touching the static field.
+
 Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`, `frame`, `captions`). The editor's canvas overlay uses them to hit-test and outline what's under the pointer in the live preview, so on-canvas editing works for every clip type and template without per-template code.
 
 ## 4. Rendering
@@ -88,6 +107,9 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 - **Filmstrips**: each video gets a sprite of evenly spaced frames (`tile` filter, keyframes only for long files) that the timeline slices into thumbnails at any zoom.
 - **Browser recordings** (voice, camera, screen from `MediaRecorder`) are WebM files without a duration; they are remuxed with stream copy before probing.
+- **Face detection** (`media/faces.ts`): the bundled YuNet model (`assets/models`, 232 KB, MIT) runs on `onnxruntime-node`, an optional dependency.
+  - FFmpeg streams letterboxed BGR frames of the needed source range at 2 fps, and the stream is paused while inference catches up, so memory stays flat.
+  - The model's outputs are decoded at strides 8/16/32, with non-maximum suppression. That costs about 30 ms per frame on a CPU.
 - **Speech enhancement** (`enhanceSpeech`): `highpass` → `lowpass` → `afftdn` → `acompressor` → `loudnorm`, in light / medium / strong strengths. The video stream is copied, not re-encoded, and the transcript carries over to the new asset, which then replaces the original's clips in one undo step.
 
 ## 6. The Director agent
@@ -95,7 +117,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 42 in total):
+- **Tools** (`tools/`, 43 in total):
 
   | Category | Tools |
   |---|---|
@@ -105,7 +127,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
   | Research | `web_search`, `fetch_url` |
   | Script | `write_script`, `list_voices` |
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
-  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut` |
+  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe` |
   | Motion | `list_templates`, `write_code_scene` |
   | Review | `check_timeline`, `preview_frames` |
   | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `create_short`, `upload_to_youtube` |
@@ -123,6 +145,16 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 - **OpenAI-compatible**: streaming tool-call assembly, `max_completion_tokens` vs `max_tokens` quirks, and image parts. This covers OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Ollama, LM Studio and anything else that speaks the protocol.
 - **Gemini** (`@google/genai`): JSON-schema function declarations and thought-signature replay.
 
+### Smart reframe
+
+`src/shared/reframe.ts` turns face samples into a crop path. It is pure and unit tested.
+1. **Focus formula.** For a "cover" fit with zoom `s`, media point `c` appears at `f + s·(c·k − f·(k−1) − f)`, where `k` is how far the media overflows the frame. Solving for the focus `f` that puts the face at the target (center, slightly above middle) gives `f = (s·c·k − target) / (s·k − 1)` per axis.
+2. **Subject.** The subject is the biggest face, but the camera stays with the current one while it is comparable, so it doesn't flip between two people. Frames with no face hold the last position.
+3. **Path.** A median filter removes detector spikes. Jumps bigger than a quarter frame split the path into shots, aligned to the asset's scene cuts when known, with `hold` keys so the camera cuts with the footage.
+4. **Simplify.** Each shot is smoothed and simplified with Ramer–Douglas–Peucker within a tolerance measured in frame units. A steady subject becomes one static focus; otherwise you get a few linear `focus.x/y` keys.
+
+`src/server/reframe.ts` applies this to clips: the `auto_reframe` tool (Director, MCP, the Inspector's **Track faces**) and Make a Short, which reframes the new 9:16 project automatically.
+
 ### Shorts from a long video
 
 `src/server/shorts.ts` (`create_short`, `POST /api/projects/:id/shorts`, and **Make a Short** in the UI) derives a new project from one or more time ranges. It never modifies the source:
@@ -134,14 +166,19 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 ## 7. MCP
 
-- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 39 non-chat Director tools plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
+- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 40 non-chat Director tools plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
 - **Client** (`src/server/mcp/client.ts`): servers configured in Settings (stdio or HTTP) are connected at startup and on change. Their tools are offered to the Director as `mcp__<server>__<tool>`.
 
 ## 8. The editor UI
 
 `src/web/` is a React app. A Zustand store (`lib/store.ts`) holds the project, playhead, selection, in/out range and UI preferences.
 - **Shared actions** (`lib/actions.ts`) are used by keyboard shortcuts, context menus, toolbar buttons and the command palette alike. They cover split, ripple trims, nudges, clipboard, markers, ranges, J/K/L shuttle, transcript cuts, speech enhancement and Make a Short.
-- **Canvas overlay** (`editor/CanvasOverlay.tsx`): selection outlines, drag/resize handles, snapping guides and keyboard nudges over the live preview. Drags go through `editSoon`, so each gesture is one undo step.
+- **Canvas overlay** (`editor/CanvasOverlay.tsx`): selection outlines, drag/resize handles, snapping guides and keyboard nudges over the live preview. Drags start from the animated values at the playhead and auto-key animated channels. They go through `editSoon`, so each gesture is one undo step.
+- **Keyframes UI** (`editor/Keyframes.tsx`):
+  - the ◆ button next to animatable fields;
+  - `useAnim`, which binds fields to channel values at the playhead and auto-keys;
+  - the Animation section: presets, plus every key with its time, value, easing and delete.
+  Timeline clips show key diamonds (drag to retime, right-click for easing) and an animated volume curve.
 - **Timeline** (`editor/Timeline.tsx`, `TimelineClip.tsx`): a canvas ruler (ticks, chapters, markers, range), clips with filmstrips, waveforms, volume envelopes and fade handles, rubber-band selection and snapping.
 - **Transcript panel** (`panels/TranscriptPanel.tsx`): timeline words (`timelineWordsDetailed`) mapped back to clips. Cutting words turns them into ripple-deleted ranges, and filler and pause detection (`fillerRanges`, `pauseRanges`) live in `src/shared/timeline.ts`.
 - **Command palette** (`lib/commands.ts`, `editor/CommandPalette.tsx`): fuzzy search over commands, clips and times, plus one-line Director briefs.
@@ -161,7 +198,18 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 When an engine gives no word timings, the voiceover is transcribed for alignment. If that's unavailable, timings are estimated.
 
-## 10. Security notes
+## 10. Distribution
+
+- **Launchers** (`Cutroom.bat`, `Cutroom.command`, `cutroom.sh`):
+  - **Node.js:** installed when missing. Windows uses winget; on macOS and Linux it's a checksum-verified private copy in `.cutroom-runtime/`.
+  - **Packages:** `npm ci` runs on the first launch, and again whenever `package-lock.json` changes.
+  - **Start:** `director start` builds the UI if needed and opens the browser.
+- **Docker** (`Dockerfile`, `docker-compose.yml`):
+  - **Build:** a two-stage build (`npm ci` → UI build → `npm prune --omit=dev`) onto `node:22-bookworm-slim`, with FFmpeg, Chrome's libraries and the Remotion render browser.
+  - **Runtime:** runs as `node`, with `DIRECTOR_DATA_DIR=/data` on a volume and a health check on `/api/health`.
+  - **Compose:** publishes on `127.0.0.1:3333` only and gives Chrome 1 GB of shared memory.
+
+## 11. Security notes
 
 - The server binds to `127.0.0.1` by default.
 - Settings are stored with file mode 600. API keys are masked (`••••abcd`) in every API response, and masked values sent back are merged with the stored secrets.
