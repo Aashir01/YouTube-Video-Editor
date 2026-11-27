@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Img, Sequence, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Img, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Clip, CompositionInput, Project, Track } from '../shared/schema';
 import { speechIntervals } from '../shared/timeline';
+import { animateClip } from '../shared/keyframes';
 import { StudioProvider, makeTheme, useStudio, useTheme } from './context';
 import { AudioView, CaptionsView, CodeView, ImageView, SceneView, TextView, VideoView, VisualFrame } from './clips';
 import { useFontsReady } from './fonts';
@@ -20,6 +21,13 @@ export const usedFonts = (p: Project): string[] => {
     }
   }
   return [...ids];
+};
+
+/** Renders a clip as it looks at the current frame: keyframed properties are interpolated here. */
+const Animated = <T extends Clip>({ clip, children }: { clip: T; children: (c: T) => React.ReactNode }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  return <>{children(clip.keyframes ? animateClip(clip, frame / fps) : clip)}</>;
 };
 
 const ClipSequence: React.FC<{ clip: Clip; track: Track }> = ({ clip, track }) => {
@@ -42,25 +50,37 @@ const ClipSequence: React.FC<{ clip: Clip; track: Track }> = ({ clip, track }) =
     case 'video':
       return (
         <Sequence from={from} durationInFrames={durationInFrames} premountFor={fps} name={name}>
-          <VisualFrame clip={clip}>
-            <VideoView clip={clip} trackMuted={track.muted} />
-          </VisualFrame>
+          <Animated clip={clip}>
+            {(c) => (
+              <VisualFrame clip={c}>
+                <VideoView clip={c} trackMuted={track.muted} />
+              </VisualFrame>
+            )}
+          </Animated>
         </Sequence>
       );
     case 'image':
       return (
         <Sequence from={from} durationInFrames={durationInFrames} premountFor={Math.round(fps / 2)} name={name}>
-          <VisualFrame clip={clip}>
-            <ImageView clip={clip} />
-          </VisualFrame>
+          <Animated clip={clip}>
+            {(c) => (
+              <VisualFrame clip={c}>
+                <ImageView clip={c} />
+              </VisualFrame>
+            )}
+          </Animated>
         </Sequence>
       );
     case 'text':
       return (
         <Sequence from={from} durationInFrames={durationInFrames} name={name}>
-          <VisualFrame clip={clip}>
-            <TextView clip={clip} />
-          </VisualFrame>
+          <Animated clip={clip}>
+            {(c) => (
+              <VisualFrame clip={c}>
+                <TextView clip={c} />
+              </VisualFrame>
+            )}
+          </Animated>
         </Sequence>
       );
     case 'scene':

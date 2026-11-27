@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Lock } from 'lucide-react';
 import type { Clip, Project, Track } from '../../../shared/schema';
 import { clipEnd } from '../../../shared/timeline';
+import { animateClip, isAnimated, isChannelOf } from '../../../shared/keyframes';
 import { clipLabel, getClipRef, useStudio } from '../../lib/store';
 import { clamp, cn } from '../../lib/utils';
 
@@ -128,7 +129,37 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
     return best ?? { offset: 0, guide: null };
   };
 
-  const patchClip = (clipId: string, patch: Record<string, unknown>, label: string) => useStudio.getState().editSoon(`canvas:${clipId}`, { op: 'updateClip', clipId, patch }, label);
+  /**
+   * Apply a canvas edit. Animated properties get a keyframe at the playhead (auto-key);
+   * everything else changes its static value. One drag = one undo step either way.
+   */
+  const patchClip = (clipId: string, patch: Record<string, unknown>, label: string) => {
+    const st = useStudio.getState();
+    const c = getClipRef(st.project, clipId)?.clip;
+    if (!c) return;
+    const keyed: Record<string, number> = {};
+    const rest: Record<string, unknown> = {};
+    const animatedChannel = (ch: string) => isChannelOf(c.type, ch) && isAnimated(c, ch);
+    for (const [k, v] of Object.entries(patch)) {
+      if (typeof v === 'number' && animatedChannel(k)) keyed[k] = v;
+      else if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const sub: Record<string, unknown> = {};
+        for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) {
+          if (typeof sv === 'number' && animatedChannel(`${k}.${sk}`)) keyed[`${k}.${sk}`] = sv;
+          else sub[sk] = sv;
+        }
+        if (Object.keys(sub).length) rest[k] = sub;
+      } else rest[k] = v;
+    }
+    if (Object.keys(rest).length) st.editSoon(`canvas:${clipId}`, { op: 'updateClip', clipId, patch: rest }, label);
+    if (Object.keys(keyed).length) {
+      const t = Math.round((st.time - c.start) * 1000) / 1000;
+      if (t >= -0.001 && t <= c.duration + 0.001) st.editSoon(`canvas-kf:${clipId}`, { op: 'setKeyframe', clipId, t: clamp(t, 0, c.duration), values: keyed }, `${label} (keyframe)`);
+    }
+  };
+
+  /** The clip as it is drawn right now (animated values at the playhead). */
+  const atPlayhead = <T extends Clip>(c: T): T => (c.keyframes ? animateClip(c, useStudio.getState().time - c.start) : c);
 
   const startDrag = (e: React.PointerEvent, el: HTMLElement, clip: Clip, track: Track, handle: Handle | null) => {
     const kind = el.dataset.clipKind as Kind;
@@ -289,7 +320,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
     }
     if (!st.selection.includes(id) || st.selection.length > 1) st.select([id]);
     const ref = getClipRef(st.project, id);
-    if (ref) startDrag(e, el, ref.clip, ref.track, null);
+    if (ref) startDrag(e, el, atPlayhead(ref.clip), ref.track, null);
   };
 
   const onHandleDown = (e: React.PointerEvent, h: Handle) => {
@@ -298,7 +329,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
     const st = useStudio.getState();
     const el = findEl(selectedId);
     const ref = getClipRef(st.project, selectedId);
-    if (el && ref) startDrag(e, el, ref.clip, ref.track, h);
+    if (el && ref) startDrag(e, el, atPlayhead(ref.clip), ref.track, h);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -321,7 +352,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
     const step = e.shiftKey ? 0.05 : e.altKey ? 0.001 : 0.005;
     const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
     const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-    const c = ref.clip;
+    const c = atPlayhead(ref.clip);
     if (c.type === 'text') patchClip(c.id, { x: round4(clamp(c.x + dx, 0, 1)), y: round4(clamp(c.y + dy, 0, 1)) }, 'Nudge text');
     else if ((c.type === 'video' || c.type === 'image') && c.box) patchClip(c.id, { box: { ...c.box, x: round4(c.box.x + dx), y: round4(c.box.y + dy) } }, 'Nudge picture-in-picture');
     else if (c.type === 'video' || c.type === 'image') patchClip(c.id, { focus: { x: round4(clamp((c.focus?.x ?? 0.5) - dx * 2, 0, 1)), y: round4(clamp((c.focus?.y ?? 0.5) - dy * 2, 0, 1)) } }, 'Reframe');

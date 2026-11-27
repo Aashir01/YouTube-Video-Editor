@@ -16,6 +16,7 @@ import {
   type Word,
 } from './schema';
 import { uid } from './ids';
+import { describeAnimation, pruneKeyframes, sanitizeKeyframes, shiftKeyframes } from './keyframes';
 
 export const EPS = 0.001;
 export const round3 = (n: number): number => Math.round(n * 1000) / 1000;
@@ -250,6 +251,7 @@ export const normalizeClip = (input: ClipInput | Clip): Clip => {
   const parsed = ClipSchema.parse(withId);
   parsed.start = round3(parsed.start);
   parsed.duration = round3(parsed.duration);
+  sanitizeKeyframes(parsed);
   return parsed;
 };
 
@@ -344,6 +346,11 @@ const cutClip = (c: Clip, from: number, to: number, newId = false): Clip => {
   if (copy.type === 'captions' && copy.mode === 'manual') {
     copy.words = copy.words.filter((w) => w.end > from && w.start < to);
   }
+  // keyframes stay where they were on the timeline, so a split piece keeps moving exactly as before
+  if (copy.keyframes) {
+    shiftKeyframes(copy, -offset);
+    pruneKeyframes(copy);
+  }
   if (from > c.start + EPS) delete copy.transitionIn;
   if (to < clipEnd(c) - EPS) delete copy.transitionOut;
   return copy;
@@ -404,6 +411,8 @@ export const trimClip = (p: Project, clipId: string, edges: { start?: number; en
   if (next.type === 'video' && delta !== 0) {
     next.zooms = next.zooms.map((z) => ({ ...z, at: z.at - delta })).filter((z) => z.at + z.duration > 0 && z.at < next.duration);
   }
+  // media keyframes are tied to the footage (a reframe follows the picture); graphics keep theirs relative to the clip start
+  if ((next.type === 'video' || next.type === 'audio') && delta !== 0) shiftKeyframes(next, -delta);
   ref.track.clips[ref.index] = next;
   if (conflictsOnTrack(ref.track, next).length > 0) {
     ref.track.clips[ref.index] = c;
@@ -784,6 +793,11 @@ export const lintProject = (p: Project, knownTemplates?: string[]): string[] => 
 };
 
 const describeClip = (c: Clip, p: Project): string => {
+  const anim = describeAnimation(c);
+  return anim ? `${describeClipBase(c, p)} ${anim}` : describeClipBase(c, p);
+};
+
+const describeClipBase = (c: Clip, p: Project): string => {
   const span = `${c.start.toFixed(2)}–${clipEnd(c).toFixed(2)}s`;
   switch (c.type) {
     case 'video': {

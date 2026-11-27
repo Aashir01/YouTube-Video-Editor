@@ -35,7 +35,16 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 - Reads what you're looking at: the playhead, selected clips and in/out range travel with your message, so "make *this* shorter" or "turn this part into a Short" just works.
 
 **A professional editor, not just a chat**
-- **Edit right on the video.** Click anything in the preview to select it, drag to move, pull handles to resize, and nudge with the arrow keys. Guides snap to the center, the thirds, the safe margins and other elements. Drag full-frame footage to reframe it, or zoom in with one-click presets (center, left, right, top, face).
+- **Edit right on the video.** Click anything in the preview to select it, drag to move, pull handles to resize, and nudge with the arrow keys. Guides snap to the center, the thirds, the safe margins and other elements. Drag full-frame footage to reframe it, or zoom in with one-click presets.
+- **Keyframe animation.** You can animate position and size, crop and zoom, opacity, rotation, volume, and text position and size:
+  - **Set keys:** click ◆ next to a setting, then change it at another moment. When a clip is animated, dragging it in the preview sets keyframes automatically.
+  - **Edit keys:** keyframes show as diamonds on the timeline. Drag them to retime, or right-click for easing (linear, ease in/out, hold).
+  - **Presets:** one click for fade, slow zoom or slide in/out.
+- **Smart reframe.** Face tracking keeps the speaker in frame when a crop is applied, for example when 16:9 footage goes into a 9:16 Short:
+  - a locked crop when they stay put;
+  - smooth camera moves when they move;
+  - a hard cut when the footage cuts.
+  It runs locally in about 30 ms per frame, automatically in **Make a Short**, or with **Track faces** in the Inspector.
 - **Edit by text.** The transcript follows playback word by word. Select words and press Delete to cut them from the video. One click removes every filler word or tightens long pauses, and a double-click fixes a misheard word.
 - **Pro timeline**:
   - Editing: move, trim, split, ripple delete, rubber-band selection, copy/paste at the playhead, Q/W ripple trims, frame nudges, J/K/L shuttle and jumps between edit points.
@@ -44,7 +53,7 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 - **Record** your voice, camera or screen straight onto the timeline at the playhead, with device picker, level meter and countdown. A camera take becomes a picture-in-picture when the main track is in use.
 - **Enhance speech** in one click: rumble and hiss removal, denoise, compression and loudness leveling, without re-encoding the video.
 - **Command palette** (`Ctrl/⌘+K`): run any command, jump to a time (`1:23`), find a clip by its text, or ask the Director. `?` lists every shortcut. There's also an undo-history menu, a save indicator and `/` quick briefs in the chat.
-- **Long video → Shorts.** Mark a range or select words in the transcript, then click **Make a Short**. You get a new 9:16 project with the footage reframed, graphics kept in sync, music trimmed to length and captions added. The Director can do the same.
+- **Long video → Shorts.** Mark a range or select words in the transcript, then click **Make a Short**. You get a new 9:16 project with the footage reframed on the speaker's face, graphics kept in sync, music trimmed to length and captions added. The Director can do the same.
 - Frame-accurate preview (Remotion Player) with playback speed, zoom, safe-zone, thirds and center guides, and in/out looping.
 - Inspector for every clip type: placement and picture-in-picture, color grading, Ken Burns, punch-in zooms, transitions, text styling, captions styling, and auto-generated forms for template props. Your brand colors are one click away in every color field.
 - **28 motion-graphics templates** that use your brand colors and fonts, **8 caption styles**, and **12 built-in sound effects** with 2 music beds, all generated locally.
@@ -56,9 +65,10 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 
 | Layer | Tech |
 |---|---|
-| Composition & rendering | [Remotion](https://www.remotion.dev) 4 (React → video), FFmpeg |
+| Composition & rendering | [Remotion](https://www.remotion.dev) 4 (React → video), FFmpeg, keyframe animation |
+| Vision | Local face detection (YuNet on ONNX Runtime) for smart reframing |
 | Server | Node 20+, Hono, Server-Sent Events, Zod-validated project document |
-| Agent | Custom tool-calling loop (Claude-Code-style): 42 tools, skills, sub-agents, context compaction |
+| Agent | Custom tool-calling loop (Claude-Code-style): 43 tools, skills, sub-agents, context compaction |
 | LLM adapters | Native Anthropic, OpenAI-compatible and Gemini adapters (streaming, tool calls, vision) |
 | UI | React 19, Vite, Tailwind CSS 4, Zustand, Radix |
 | Integrations | MCP server (Streamable HTTP + stdio), MCP client, YouTube Data API |
@@ -69,25 +79,45 @@ The editor UI, the AI agent and MCP clients all edit the **same project document
 
 ## Quick start
 
-### 1. Requirements
+### 1. Install and run (pick one)
 
-- **Node.js 20.19 or newer** (22 LTS recommended): <https://nodejs.org>
-- **FFmpeg** (recommended; a bundled fallback covers most features):
-  - macOS: `brew install ffmpeg`
-  - Windows: `winget install Gyan.FFmpeg`
-  - Ubuntu/Debian: `sudo apt install ffmpeg`
-- About 1 GB of disk space. On the first render, Remotion downloads a headless Chrome (~100 MB) unless you point it at an installed Chrome (Settings → Rendering).
+**One click** (Windows, macOS, Linux). Download the project (**Code → Download ZIP** on GitHub, then unzip it, or `git clone` it). Then:
 
-### 2. Install and run
+| System | Start it with |
+|---|---|
+| Windows | double-click **`Cutroom.bat`** |
+| macOS | double-click **`Cutroom.command`** (the first time: right-click it, choose **Open**, then **Open**) |
+| Linux | run **`./cutroom.sh`** |
+
+The first run sets everything up, which takes a few minutes:
+- **Node.js:** installed if it's missing. Windows uses winget. macOS and Linux get a private, checksum-verified copy inside the folder, with no admin rights needed.
+- **Packages:** the app's packages are installed.
+- **Editor:** the editor is built.
+
+Cutroom then opens in your browser. Later starts take a second; close the window to stop it.
+
+**Docker.** If you have Docker, this is everything:
 
 ```bash
-git clone https://github.com/Aashir01/YouTube-Video-Editor.git director-studio
-cd director-studio
+docker compose up -d     # then open http://localhost:3333
+```
+
+Your projects and settings live in the `cutroom_cutroom-data` volume. API keys can go in a `.env` file next to `docker-compose.yml`, or into Settings. FFmpeg and the render browser come inside the image. By default only your own computer can open it.
+
+**From source** (for development): Node.js 20.19+ ([nodejs.org](https://nodejs.org)), then:
+
+```bash
+git clone https://github.com/Aashir01/YouTube-Video-Editor.git cutroom
+cd cutroom
 npm install
 npm start          # builds the UI on first run, then opens http://localhost:3333
 ```
 
-Run `npm run doctor` any time to check FFmpeg, the render browser, your AI model and the optional local engines.
+### 2. Good to know
+
+- **FFmpeg** is recommended for the one-click and source installs: `brew install ffmpeg` (macOS), `winget install Gyan.FFmpeg` (Windows) or `sudo apt install ffmpeg` (Linux). A bundled fallback covers most features without it.
+- **Disk space:** about 1.5 GB. On the first render, Remotion downloads a headless Chrome (~100 MB) unless you point it at an installed Chrome (Settings → Rendering).
+- **Checking your setup:** run `npm run doctor` any time to check FFmpeg, the render browser, your AI model and the optional local engines.
 
 ### 3. Connect an AI model
 
@@ -178,7 +208,7 @@ You can drag media, templates and sounds from the left panel (or files from your
 
 ## Use it from Claude Code, Claude Desktop or Cursor (MCP)
 
-Cutroom is an MCP server with **43 tools**: the Director's 39 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
+Cutroom is an MCP server with **44 tools**: the Director's 40 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
 
 **Claude Code** (while the studio is running):
 
@@ -257,6 +287,8 @@ data/skills/                       your own playbooks
 data/cache/                        render bundle, downloaded local models
 ```
 
+With Docker, all of this lives in the `cutroom_cutroom-data` volume (mounted at `/data`).
+
 Content is sent only to the services you configure: your LLM provider, and optionally TTS, transcription, stock, search, image and YouTube APIs.
 
 ## Troubleshooting
@@ -265,6 +297,7 @@ Content is sent only to the services you configure: your LLM provider, and optio
 - **The Director stops with a model error**: the message shows the provider's error. Common causes are an invalid key, a model without tool-calling support, or a context window that's too small (use a bigger model).
 - **Render fails on Linux**: Chromium needs the usual system libraries (`libnss3`, `libatk-bridge2.0-0`, `libgbm1`, `libasound2`…). Alternatively, set a local Chrome in Settings → Rendering.
 - **No captions appear**: captions follow the transcripts. Check the transcription engine in Settings → Voice & speech, then use "Transcribe" on the asset in the Media panel (or "Transcribe the timeline" in the Text panel).
+- **Smart reframe says face detection isn't available**: the optional `onnxruntime-node` package didn't install on this computer. Run `npm install` again. Without it you can still reframe by hand: drag the picture, or animate Focus X/Y.
 - **Recording doesn't start**: allow camera/microphone access for the page in your browser. Screen recording needs a browser that supports screen capture (Chrome, Edge, Firefox).
 - Run `npm run doctor` for a full report.
 
@@ -282,8 +315,9 @@ bin/director.mjs        CLI
 src/shared/             project schema, timeline operations, templates catalog (used by server, UI and renderer)
 src/remotion/           the video composition: clips, effects, 28 templates, captions, code scenes, thumbnails
 src/server/             HTTP API, storage, media pipeline, rendering, services, agent, MCP
-src/server/agent/       Director loop, prompts, skills (Markdown), 42 tools
+src/server/agent/       Director loop, prompts, skills (Markdown), 43 tools
 src/web/                the editor UI
+assets/models/          bundled ONNX models (face detection for smart reframe)
 docs/ARCHITECTURE.md    how it all fits together
 ```
 

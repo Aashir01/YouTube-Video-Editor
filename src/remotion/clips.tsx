@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AbsoluteFill, Html5Audio, Img, OffthreadVideo, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { AudioClip, CaptionsClip, CodeClip, ImageClip, SceneClip, TextClip, VideoClip, VisualClip, Word } from '../shared/schema';
 import { captionWords, duckGain, paginateWords } from '../shared/timeline';
+import { channelAt, isAnimated } from '../shared/keyframes';
 import { safeTemplateProps } from '../shared/templates';
 import { fontFamily } from '../shared/fonts';
 import { useStudio, useTheme } from './context';
@@ -25,8 +26,9 @@ export const VisualFrame: React.FC<{ clip: VisualClip; children: React.ReactNode
   const tr = transitionStyle(clip.transitionIn, clip.transitionOut, frame, durationInFrames, fps, u);
   const grade = hasGrade(clip) ? gradeFilter(clip.grade) : { vignette: 0 };
   const box = 'box' in clip ? clip.box : undefined;
+  // text clips place, fade and rotate themselves inside TextView (around the text's own center)
   const opacity = 'opacity' in clip && clip.type !== 'text' ? clip.opacity : 1;
-  const rotation = 'rotation' in clip ? clip.rotation : 0;
+  const rotation = 'rotation' in clip && clip.type !== 'text' ? clip.rotation : 0;
   const flip = 'flipX' in clip && clip.flipX;
   const radius = 'radius' in clip ? clip.radius : 0;
   const shadow = 'shadow' in clip && clip.shadow;
@@ -86,8 +88,8 @@ export const VideoView: React.FC<{ clip: VideoClip; trackMuted: boolean }> = ({ 
       src={src}
       trimBefore={Math.round(clip.trimStart * fps)}
       playbackRate={clip.speed}
-      muted={trackMuted || clip.muted || clip.volume === 0}
-      volume={(f) => clip.volume * fadeGain(f, total, clip.audioFadeIn, clip.audioFadeOut, fps)}
+      muted={trackMuted || clip.muted || (clip.volume === 0 && !isAnimated(clip, 'volume'))}
+      volume={(f) => channelAt(clip, 'volume', f / fps) * fadeGain(f, total, clip.audioFadeIn, clip.audioFadeOut, fps)}
       pauseWhenBuffering
       style={{ width: '100%', height: '100%', ...frameStyle }}
     />
@@ -141,7 +143,7 @@ export const AudioView: React.FC<{ clip: AudioClip; trackMuted: boolean }> = ({ 
       loopVolumeCurveBehavior="extend"
       pauseWhenBuffering
       volume={(f) => {
-        let v = clip.volume * fadeGain(f, total, clip.fadeIn, clip.fadeOut, fps);
+        let v = channelAt(clip, 'volume', f / fps) * fadeGain(f, total, clip.fadeIn, clip.fadeOut, fps);
         if (clip.duck) v *= duckGain(clip.start + f / fps, speech, duckLevel);
         return v;
       }}

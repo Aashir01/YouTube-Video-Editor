@@ -1,12 +1,15 @@
 import { CaptionStyleSchema, YouTubeSchema, type CaptionStyle, type Project } from '../shared/schema';
 import { clearRange, mergeIntervals, placeClip, projectDuration, rippleDelete, round3, type Interval } from '../shared/timeline';
 import { store } from './storage/projects';
+import { applyReframes, planReframes } from './reframe';
 
 export interface ShortOptions {
   /** title of the new project (default: "<name> — Short") */
   title?: string;
-  /** horizontal crop focus (0-1) for full-frame footage, e.g. where the speaker is */
+  /** horizontal crop focus (0-1) for full-frame footage, e.g. where the speaker is (turns off face tracking) */
   focusX?: number;
+  /** track faces to keep the speaker in frame (default true) */
+  smartReframe?: boolean;
 }
 
 const isMusicTrack = (p: Project, trackId: string) => {
@@ -31,7 +34,7 @@ export const createShort = async (projectId: string, ranges: Interval[], opts: S
   if (length > 180) throw new Error(`That is ${Math.round(length)}s; YouTube Shorts can be at most 3 minutes`);
   const name = opts.title?.trim() || `${src.name} — Short`;
 
-  return store.derive(projectId, name, (d) => {
+  const short = await store.derive(projectId, name, (d) => {
     // captions are rebuilt as one clip at the end (cutting would leave fragments)
     const captionTrack = d.tracks.find((t) => t.kind === 'captions');
     let captionStyle: Partial<CaptionStyle> | undefined;
@@ -76,4 +79,15 @@ export const createShort = async (projectId: string, ranges: Interval[], opts: S
     d.markers = [];
     d.youtube = YouTubeSchema.parse({ title: name.slice(0, 100), hashtags: ['#shorts'], category: d.youtube.category, privacy: 'private' });
   });
+
+  // keep the speaker in the vertical frame: follow faces (a separate undo step in the new project)
+  if (opts.focusX !== undefined || opts.smartReframe === false) return short;
+  try {
+    const results = await planReframes(short);
+    if (!results.some((r) => r.patch)) return short;
+    return await store.update(short.id, 'Smart reframe', (d) => void applyReframes(d, results));
+  } catch (err) {
+    console.warn('[shorts] smart reframe skipped:', err instanceof Error ? err.message : err);
+    return short;
+  }
 };

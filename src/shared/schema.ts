@@ -120,6 +120,20 @@ export const WordSchema = z.object({
 // Clips
 // ---------------------------------------------------------------------------
 
+export const KEYFRAME_EASES = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'] as const;
+
+export const KeyframeSchema = z.object({
+  t: z.number().min(-86400).max(86400).describe('Seconds from the clip start'),
+  v: z.number().describe('Value at that moment'),
+  ease: z.enum(KEYFRAME_EASES).optional().describe('How the value travels to the next keyframe (default ease-in-out; hold = jump)'),
+});
+
+export const KeyframesSchema = z
+  .record(z.string(), z.array(KeyframeSchema))
+  .describe(
+    'Animated properties: channel -> keyframes sorted by t. Channels: video/image "box.x" "box.y" "box.w" "box.h" "focus.x" "focus.y" "scale" "opacity" "rotation" (+ "volume" on video); text "x" "y" "style.size" "opacity" "rotation"; audio "volume". An animated channel overrides the static field.',
+  );
+
 const clipBase = {
   id: Id,
   start: Seconds.describe('Position on the timeline in seconds'),
@@ -127,6 +141,7 @@ const clipBase = {
   name: z.string().optional(),
   transitionIn: TransitionSchema.optional(),
   transitionOut: TransitionSchema.optional(),
+  keyframes: KeyframesSchema.optional(),
 };
 
 export const FocusSchema = z
@@ -537,6 +552,9 @@ export type KenBurns = z.infer<typeof KenBurnsSchema>;
 export type Zoom = z.infer<typeof ZoomSchema>;
 export type ColorGrade = z.infer<typeof ColorGradeSchema>;
 export type Word = z.infer<typeof WordSchema>;
+export type Keyframe = z.infer<typeof KeyframeSchema>;
+export type KeyframeEase = (typeof KEYFRAME_EASES)[number];
+export type Keyframes = z.infer<typeof KeyframesSchema>;
 export type VideoClip = z.infer<typeof VideoClipSchema>;
 export type ImageClip = z.infer<typeof ImageClipSchema>;
 export type AudioClip = z.infer<typeof AudioClipSchema>;
