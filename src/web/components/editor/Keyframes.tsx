@@ -25,6 +25,8 @@ import { Section } from '../ui';
 type Patch = (p: Record<string, unknown>) => void;
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
+/** Playhead for displays: exact when paused, 4 updates a second while playing (no 60 Hz re-renders). */
+const displayTime = (s: { time: number; playing: boolean }) => (s.playing ? Math.round(s.time * 4) / 4 : s.time);
 const OUTSIDE = 'Move the playhead over the clip to set keyframes';
 export const EASE_LABELS: Record<KeyframeEase, string> = { linear: 'Linear', 'ease-in': 'Ease in', 'ease-out': 'Ease out', 'ease-in-out': 'Ease in & out', hold: 'Hold' };
 
@@ -109,7 +111,7 @@ export interface AnimFields {
 
 export const useAnim = (clip: Clip, patch: Patch): AnimFields => {
   // only an animated clip needs to follow the playhead: its values change over time
-  const time = useStudio((s) => (clip.keyframes ? s.time : 0));
+  const time = useStudio((s) => (clip.keyframes ? displayTime(s) : 0));
   const t = clamp(time - clip.start, 0, clip.duration);
   const value = (ch: Channel) => (isAnimated(clip, ch) ? channelAt(clip, ch, t) : staticValue(clip, ch));
   const set: AnimFields['set'] = (values, label = 'Keyframe') => {
@@ -243,7 +245,7 @@ const PRESETS: Preset[] = [
 
 export const AnimationSection: React.FC<{ clip: Clip }> = ({ clip }) => {
   const chs = animatedChannels(clip);
-  const now = useStudio((s) => (clip.keyframes ? r3(s.time - clip.start) : -1));
+  const now = useStudio((s) => (clip.keyframes ? r3(displayTime(s) - clip.start) : -1));
   if (!ANIMATABLE[clip.type].length) return null;
   const { edit } = useStudio.getState();
   const presets = PRESETS.filter((p) => p.applies(clip));
