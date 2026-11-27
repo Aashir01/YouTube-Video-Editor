@@ -9,7 +9,7 @@ description: YouTube Shorts / vertical video specifics — format, safe zones, h
 - **Hook in the first second**: start mid-action or with the boldest line; no logo intro, no "hey guys".
 - **Captions**: `bold-pop` or `highlight-box`, 2–3 words, `position: center`, `offsetY` 0.08–0.15.
 - **Pacing**: a visual change every 1.5–3s (cuts, zooms, b-roll, text pops, emoji bursts).
-- **Reframing landscape footage**: put the 16:9 clip on Main with `fit: cover`, then call `auto_reframe`: it finds the speaker's face and keeps it in frame (a locked crop, smooth `focus.x` keyframes when they move, cuts with the footage). Check the result with `preview_frames`. To place it by hand instead, set `focus` or animate `focus.x` keyframes; or show the footage smaller with `box` + `blurredBackdrop`-style background.
+- **Reframing landscape footage**: put the 16:9 clip on Main with `fit: cover`, then call `auto_reframe`: it finds the speaker's face and keeps it in frame (a locked crop, smooth `focus.x` keyframes when they move, cuts with the footage). For podcasts and interviews it cuts to whoever is talking. Check the result with `preview_frames`. To place it by hand instead, set `focus` or animate `focus.x` keyframes; or show the footage smaller with `box` + `blurredBackdrop`-style background.
 - **Loop**: end on a line/visual that flows back into the first second.
 - **Repurposing long-form**: find the most self-contained 20–60s moment in the transcript (a strong claim + payoff), cut it with `auto_cut` using `removeRanges` to keep only that span, then add captions, zooms and a hook text in the first 2s.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverGeometry, focusFor, planReframe, type FaceSample } from './reframe';
+import { coverGeometry, focusFor, planReframe, planSpeakerReframe, type FaceSample, type TalkTrack } from './reframe';
 import { valueAt } from './keyframes';
 
 // 16:9 footage in a 9:16 Short: the picture is ~3.16 frame-widths wide
@@ -72,5 +72,62 @@ describe('planReframe', () => {
     const plan = planReframe(samples(10, 0.5, () => [face(0.7, 0.3)]), zoomed, 5)!;
     expect(plan.focus!.x).toBeGreaterThan(0.5);
     expect(plan.focus!.y).toBeLessThan(0.5);
+  });
+});
+
+/** A person sitting at x, whose mouth moves when talking(t) is true; faces every 0.5 s, mouth energy every 0.1 s. */
+const person = (id: number, cx: number, talking: (t: number) => boolean, duration = 12, w = 0.12): TalkTrack => ({
+  id,
+  faces: Array.from({ length: duration * 2 }, (_, i) => ({ t: i * 0.5, face: face(cx, 0.4, w) })),
+  energy: Array.from({ length: duration * 10 }, (_, i) => ({ t: i / 10, e: talking(i / 10) ? 90 + (i % 3) : 1 })),
+});
+const keysAt = (plan: ReturnType<typeof planSpeakerReframe>, t: number) => valueAt(plan!.keyframes!['focus.x']!, t);
+
+describe('planSpeakerReframe', () => {
+  const left = 0.15;
+  const right = 0.81;
+
+  it('cuts to whoever is talking, at the moment they start', () => {
+    const plan = planSpeakerReframe([person(1, left, (t) => t < 4 || t >= 8), person(2, right, (t) => t >= 4 && t < 8)], g, 12)!;
+    expect(plan.mode).toBe('speakers');
+    expect(plan.moves).toBe(2);
+    const kx = plan.keyframes!['focus.x']!;
+    expect(kx.filter((k) => k.ease === 'hold').map((k) => k.t)).toEqual([0, 4, 8]);
+    // the left face is near the picture's edge, so the crop stops there (as close to center as it gets)
+    expect(Math.abs(onScreen(left, keysAt(plan, 2)) - 0.5)).toBeLessThan(0.05);
+    expect(onScreen(right, keysAt(plan, 6))).toBeCloseTo(0.5, 2);
+    expect(Math.abs(onScreen(left, keysAt(plan, 10)) - 0.5)).toBeLessThan(0.05);
+  });
+
+  it('ignores a short interjection and keeps every shot at least two seconds', () => {
+    const blip = planSpeakerReframe([person(1, left, (t) => !(t >= 5 && t < 5.5)), person(2, right, (t) => t >= 5 && t < 5.5)], g, 12)!;
+    expect(blip.moves).toBe(0);
+    const pingPong = planSpeakerReframe([person(1, left, (t) => Math.floor(t) % 2 === 0), person(2, right, (t) => Math.floor(t) % 2 === 1)], g, 12)!;
+    const cuts = pingPong.keyframes!['focus.x']!.filter((k) => k.ease === 'hold').map((k) => k.t);
+    for (let i = 1; i < cuts.length; i++) expect(cuts[i]! - cuts[i - 1]!).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not react to a moving mouth while nobody is speaking', () => {
+    // the right person chews at 5-7 s, but the audio says that is silence
+    const plan = planSpeakerReframe([person(1, left, (t) => t < 5 || t >= 7), person(2, right, (t) => t >= 5 && t < 7)], g, 12, { speech: [[0, 5], [7, 12]] })!;
+    expect(plan.moves).toBe(0);
+  });
+
+  it('frames people together when they fit in the crop', () => {
+    const plan = planSpeakerReframe([person(1, 0.45, (t) => t < 6, 12, 0.06), person(2, 0.55, (t) => t >= 6, 12, 0.06)], g, 12)!;
+    expect(plan.mode).toBe('group');
+    expect(plan.keyframes).toBeUndefined();
+    expect(onScreen(0.5, plan.focus!.x)).toBeCloseTo(0.5, 2);
+  });
+
+  it('leaves single faces, still pictures and one person across shots to planReframe', () => {
+    expect(planSpeakerReframe([person(1, left, () => true)], g, 12)).toBeNull();
+    // the same person filmed left, then (after a cut) right: never in the frame together
+    const before = person(1, left, () => true);
+    const after = person(2, right, () => true);
+    before.faces = before.faces.filter((f) => f.t < 6);
+    after.faces = after.faces.filter((f) => f.t >= 6);
+    expect(planSpeakerReframe([before, after], g, 12)).toBeNull();
+    expect(planSpeakerReframe([person(1, left, () => false), person(2, right, () => false)], g, 12)).toBeNull();
   });
 });

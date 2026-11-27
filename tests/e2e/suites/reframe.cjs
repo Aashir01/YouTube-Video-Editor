@@ -45,6 +45,28 @@ const { BASE, post, upload, waitReady, ops, getProject, clips, check, launch, me
   console.log('face x in rendered frames:', xs.map((x) => (x === undefined ? '-' : x.toFixed(2))).join(' '));
   check(xs.every((x) => x !== undefined && Math.abs(x - 0.5) < 0.17), 'face stays in the middle of the 9:16 frame in every rendered frame');
 
+  // 2b) a two-person podcast: the camera cuts to whoever is talking (left 0-4 s, right 4-8 s, left 8-12 s)
+  const duo = await waitReady(pid, (await upload(pid, media('two-speakers.mp4'))).id, 90000);
+  await ops(pid, [{ op: 'addClip', trackId: 'B-roll', clip: { id: 'duo', type: 'video', assetId: duo.id, start: 0, duration: 12 } }]);
+  const duoRes = await call('auto_reframe', { clipIds: ['duo'] });
+  const duoKeys = clips(await getProject(pid)).find((c) => c.id === 'duo').keyframes?.['focus.x'] ?? [];
+  const held = (t) => [...duoKeys].reverse().find((k) => k.t <= t + 1e-6)?.v;
+  const cutTimes = duoKeys.filter((k) => k.ease === 'hold').map((k) => k.t);
+  check(/cutting between 2 speakers/.test(duoRes.text), `the tool reports speaker switching: ${duoRes.text.split('\n')[1]}`);
+  check(cutTimes.length === 3 && Math.abs(cutTimes[1] - 4) <= 0.5 && Math.abs(cutTimes[2] - 8) <= 0.5, `cuts at ${cutTimes.join(', ')} s (talk turns at 4 and 8 s)`);
+  check(held(2) < 0.3 && held(6) > 0.7 && held(10) < 0.3, `crop on the left speaker, then the right, then the left (focus ${[2, 6, 10].map((t) => held(t)).join(' / ')})`);
+  // the duo clip sits on B-roll above Main: render only it by hiding nothing; check a face is centered in each shot
+  const duoShots = await call('preview_frames', { times: [2, 6, 10] });
+  const duoFiles = duoShots.images.map((im, i) => {
+    const f = path.join(OUT, `duo-${i}.jpg`);
+    fs.writeFileSync(f, Buffer.from(im.data, 'base64'));
+    return f;
+  });
+  const duoX = facesIn(duoFiles, { width: 1080, height: 1920 }).map((faces) => faces?.[0]?.cx);
+  console.log('speaker x in rendered frames:', duoX.map((x) => (x === undefined ? '-' : x.toFixed(2))).join(' '));
+  check(duoX.every((x) => x !== undefined && Math.abs(x - 0.5) < 0.17), 'the talking person is centered in each rendered shot');
+  await ops(pid, [{ op: 'removeClips', clipIds: ['duo'] }]);
+
   // 3) the Inspector button on a fresh clip
   await ops(pid, [{ op: 'updateClip', clipId: 'mv', patch: { keyframes: null, focus: null } }]);
   const { page, shot: snap, finish } = await launch('reframe');

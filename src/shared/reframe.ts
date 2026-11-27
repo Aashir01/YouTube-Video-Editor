@@ -16,6 +16,17 @@ export interface FaceBox {
   w: number;
   h: number;
   score: number;
+  /** mouth center and width (fractions of the frame), from the detector's landmarks */
+  mouth?: { x: number; y: number; w: number };
+}
+
+/** One person over time: where their face is and how much their mouth moves (for who-is-talking). */
+export interface TalkTrack {
+  id: number;
+  /** detections (media fractions), clip or source time */
+  faces: { t: number; face: FaceBox }[];
+  /** mouth movement per analysis frame (higher = more likely talking) */
+  energy: { t: number; e: number }[];
 }
 
 export interface FaceSample {
@@ -102,6 +113,8 @@ export interface ReframePlan {
   keyframes?: { 'focus.x'?: Keyframe[]; 'focus.y'?: Keyframe[] };
   /** number of camera moves in the path */
   moves: number;
+  /** single: follow one face; speakers: cut to whoever talks; group: everyone fits, framed together */
+  mode?: 'single' | 'speakers' | 'group';
 }
 
 /** Pick the subject in each sample: the biggest face, but stay with the current one while it is comparable. */
@@ -143,7 +156,7 @@ export const planReframe = (samples: FaceSample[], g: CropGeometry, duration: nu
 
   const gx = panRange(g.kx, g.scale);
   const gy = panRange(g.ky, g.scale);
-  const plan: ReframePlan = { found, total: sorted.length, people, moves: 0 };
+  const plan: ReframePlan = { found, total: sorted.length, people, moves: 0, mode: 'single' };
   const focus = { x: 0.5, y: 0.5 };
   const keyframes: { 'focus.x'?: Keyframe[]; 'focus.y'?: Keyframe[] } = {};
 
@@ -194,4 +207,160 @@ export const planReframe = (samples: FaceSample[], g: CropGeometry, duration: nu
   plan.focus = focus;
   if (keyframes['focus.x'] || keyframes['focus.y']) plan.keyframes = keyframes;
   return plan;
+};
+
+// ---------------------------------------------------------------------------
+// Several people: cut to whoever is talking
+// ---------------------------------------------------------------------------
+
+export interface SpeakerOptions extends ReframeOptions {
+  /** clip-time intervals with speech (from the audio); everything counts as speech when omitted */
+  speech?: [number, number][];
+  /** decision step in seconds (default 0.5) */
+  bin?: number;
+  /** a new speaker must lead this long before the camera switches (default 1 s) */
+  minLead?: number;
+  /** shortest shot in seconds (default 2) */
+  minShot?: number;
+}
+
+const percentile = (xs: number[], p: number) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))]! : 0;
+};
+
+/**
+ * Plan a multicam-style crop for two or more people: the camera holds on whoever is talking and
+ * cuts when someone else takes over (or frames everyone when they all fit). Returns null when
+ * this does not apply: fewer than two people, or no mouth movement to tell who is talking
+ * (then use planReframe).
+ */
+export const planSpeakerReframe = (tracks: TalkTrack[], g: CropGeometry, duration: number, opts: SpeakerOptions = {}): ReframePlan | null => {
+  const bin = opts.bin ?? 0.5;
+  const nb = Math.max(1, Math.ceil(duration / bin - 1e-9));
+  const detTimes = [...new Set(tracks.flatMap((tr) => tr.faces.map((f) => f.t)))];
+  if (!detTimes.length) return null;
+  const people = tracks.filter((tr) => tr.faces.length >= Math.max(2, 0.3 * detTimes.length));
+  if (people.length < 2) return null;
+  // people who never share the frame are one person across shots (or a cut): not a conversation
+  const together = detTimes.filter((t) => people.filter((tr) => tr.faces.some((f) => Math.abs(f.t - t) < 1e-6)).length >= 2).length;
+  if (together < 0.3 * detTimes.length) return null;
+  const base: Omit<ReframePlan, 'moves'> = { found: detTimes.length, total: detTimes.length, people: people.length };
+
+  /** where a person's face typically is between t0 and t1 */
+  const posNear = (tr: TalkTrack, t0: number, t1: number): FaceBox | null => {
+    const fs = tr.faces.filter((f) => f.t >= t0 - 0.75 && f.t <= t1 + 0.75).map((f) => f.face);
+    if (!fs.length) return null;
+    return { cx: median(fs.map((f) => f.cx)), cy: median(fs.map((f) => f.cy)), w: median(fs.map((f) => f.w)), h: median(fs.map((f) => f.h)), score: 1 };
+  };
+  const all = people.map((tr) => posNear(tr, 0, duration)!);
+  const targetX = opts.targetX ?? 0.5;
+  const targetY = opts.targetY ?? 0.42;
+
+  // everyone fits in the crop: frame them together and never cut
+  const visX = 1 / (g.scale * g.kx);
+  const visY = 1 / (g.scale * g.ky);
+  const left = Math.min(...all.map((p) => p.cx - p.w * 0.75));
+  const right = Math.max(...all.map((p) => p.cx + p.w * 0.75));
+  const top = Math.min(...all.map((p) => p.cy - p.h * 0.75));
+  const bottom = Math.max(...all.map((p) => p.cy + p.h * 0.75));
+  if (right - left <= visX * 0.95 && bottom - top <= visY * 0.95) {
+    const fx = focusFor((left + right) / 2, g.kx, g.scale, 0.5);
+    const fy = focusFor((top + bottom) / 2, g.ky, g.scale, 0.45);
+    return { ...base, focus: { x: r4(fx ?? 0.5), y: r4(fy ?? 0.5) }, moves: 0, mode: 'group' };
+  }
+
+  // mouth activity per person and time step, above that person's resting level (their quietest
+  // moments; capped near the quietest person's level, so someone who hardly stops talking still counts)
+  const means = people.map((tr) => {
+    const sum = new Float64Array(nb);
+    const cnt = new Float64Array(nb);
+    for (const { t, e } of tr.energy) {
+      const b = Math.min(nb - 1, Math.max(0, Math.floor(t / bin)));
+      sum[b] += e;
+      cnt[b]++;
+    }
+    return Array.from(sum, (v, i) => (cnt[i] ? v / cnt[i]! : 0));
+  });
+  const quiet = means.map((m) => percentile(m, 0.1));
+  const idle = Math.min(...quiet);
+  const act = means.map((m, i) => {
+    const rest = Math.min(quiet[i]!, idle * 3 + 1);
+    return m.map((v) => Math.max(0, v - rest));
+  });
+  const peak = Math.max(...act.flat());
+  if (!(peak > 0)) return null; // nobody's mouth moves: cannot tell who talks
+  const floor = peak * 0.15;
+  const speechOverlap = (b: number) => !opts.speech || opts.speech.some(([a, z]) => Math.min(z, (b + 1) * bin) - Math.max(a, b * bin) >= bin * 0.4);
+
+  // who clearly talks in each step (-1 = nobody clearly: silence, or too close to call)
+  const raw = Array.from({ length: nb }, (_, b) => {
+    if (!speechOverlap(b)) return -1;
+    const order = act.map((a, i) => ({ i, v: a[b]! })).sort((x, y) => y.v - x.v);
+    const first = order[0]!;
+    const second = order[1]?.v ?? 0;
+    return first.v > floor && first.v >= 1.4 * second ? first.i : -1;
+  });
+  const opener = raw.find((r) => r >= 0);
+  if (opener === undefined) return null;
+
+  // shots: a new speaker has to lead for a moment, and every shot lasts a minimum time
+  const lead = Math.max(1, Math.round((opts.minLead ?? 1) / bin));
+  const minShot = Math.max(1, Math.round((opts.minShot ?? 2) / bin));
+  const shots: { who: number; start: number }[] = [{ who: opener, start: 0 }];
+  let runWho = -1;
+  let run = 0;
+  let runStart = 0;
+  for (let b = 0; b < nb; b++) {
+    const r = raw[b]!;
+    const cur = shots[shots.length - 1]!;
+    if (r < 0) continue; // a pause neither confirms nor breaks a turn
+    if (r === cur.who) {
+      runWho = -1;
+      run = 0;
+      continue;
+    }
+    if (r !== runWho) {
+      runWho = r;
+      run = 0;
+      runStart = b;
+    }
+    run++;
+    const cutAt = Math.max(runStart, cur.start + minShot);
+    if (run >= lead && b >= cutAt) {
+      shots.push({ who: r, start: cutAt });
+      runWho = -1;
+      run = 0;
+    }
+  }
+
+  // cut where the new speaker starts (offline, so the cut can go back to that moment), snapped to
+  // the start of their sentence or a cut in the footage when one is close
+  const anchors = [...(opts.cuts ?? []), ...(opts.speech ?? []).map(([a]) => a)];
+  const keysX: Keyframe[] = [];
+  const keysY: Keyframe[] = [];
+  shots.forEach((shot, i) => {
+    let t0 = shot.start * bin;
+    if (i > 0) {
+      const near = anchors.filter((a) => Math.abs(a - t0) <= 0.6).sort((a, b) => Math.abs(a - t0) - Math.abs(b - t0))[0];
+      if (near !== undefined) t0 = near;
+      t0 = Math.max(t0, (keysX.at(-1)?.t ?? keysY.at(-1)?.t ?? 0) + 0.1);
+    } else t0 = 0;
+    const t1 = i < shots.length - 1 ? shots[i + 1]!.start * bin : duration;
+    const p = posNear(people[shot.who]!, t0, t1) ?? all[shot.who]!;
+    const fx = focusFor(p.cx, g.kx, g.scale, targetX);
+    const fy = focusFor(p.cy, g.ky, g.scale, targetY);
+    if (fx !== null) keysX.push({ t: r3(t0), v: r4(fx), ease: 'hold' });
+    if (fy !== null) keysY.push({ t: r3(t0), v: r4(fy), ease: 'hold' });
+  });
+  const finish = (keys: Keyframe[]) => (keys.length ? [...keys, { t: r3(duration), v: keys.at(-1)!.v }] : undefined);
+  const kx = finish(keysX);
+  const ky = keysY.length && new Set(keysY.map((k) => k.v)).size > 1 ? finish(keysY) : undefined;
+  return {
+    ...base,
+    focus: { x: keysX[0]?.v ?? 0.5, y: keysY[0]?.v ?? 0.5 },
+    ...(kx || ky ? { keyframes: { ...(kx ? { 'focus.x': kx } : {}), ...(ky ? { 'focus.y': ky } : {}) } } : {}),
+    moves: shots.length - 1,
+    mode: 'speakers',
+  };
 };

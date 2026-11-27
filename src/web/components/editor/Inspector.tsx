@@ -192,7 +192,7 @@ const TrackFacesButton: React.FC<{ clip: VideoClip | ImageClip }> = ({ clip }) =
     <button
       className="btn btn-sm"
       disabled={busy}
-      title="Find the speaker's face and keep it in frame: a locked crop when they stay put, smooth moves when they move"
+      title="Find the speaker's face and keep it in frame: a locked crop when they stay put, smooth moves when they move, and cuts to whoever is talking when there are several people"
       onClick={() => {
         setBusy(true);
         const t = toast.loading('Tracking faces…');
