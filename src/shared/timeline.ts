@@ -475,34 +475,42 @@ export const speechClips = (p: Project, trackIds?: string[]): MediaClip[] => {
   return out;
 };
 
-/** Words placed on the timeline by mapping each speech clip's source transcript. */
-export const timelineWords = (
+/** A word on the timeline, with where it came from (for editing the source transcript). */
+export interface TimelineWord extends Word {
+  assetId: string;
+  /** index of the word in the asset's transcript */
+  index: number;
+  clipId: string;
+}
+
+/** Words placed on the timeline by mapping each speech clip's source transcript, with their origin. */
+export const timelineWordsDetailed = (
   p: Project,
   transcripts: Record<string, Word[]>,
   opts: { trackIds?: string[]; from?: number; to?: number } = {},
-): Word[] => {
-  const words: Word[] = [];
+): TimelineWord[] => {
+  const words: TimelineWord[] = [];
   for (const clip of speechClips(p, opts.trackIds)) {
     const src = transcripts[clip.assetId];
     if (!src || src.length === 0) continue;
     const srcFrom = clip.trimStart;
     const srcTo = clip.trimStart + clip.duration * clip.speed;
-    for (const w of src) {
-      if (w.end <= srcFrom || w.start >= srcTo) continue;
+    src.forEach((w, index) => {
+      if (w.end <= srcFrom || w.start >= srcTo) return;
       // keep a word only if most of it is inside the cut
       const inside = Math.min(w.end, srcTo) - Math.max(w.start, srcFrom);
-      if (inside < (w.end - w.start) * 0.5) continue;
+      if (inside < (w.end - w.start) * 0.5) return;
       const start = Math.max(clip.start, sourceToTimeline(clip, w.start));
       const end = Math.min(clipEnd(clip), sourceToTimeline(clip, w.end));
-      if (end <= start) continue;
-      if (opts.from !== undefined && end <= opts.from) continue;
-      if (opts.to !== undefined && start >= opts.to) continue;
-      words.push({ text: w.text, start: round3(start), end: round3(end), confidence: w.confidence });
-    }
+      if (end <= start) return;
+      if (opts.from !== undefined && end <= opts.from) return;
+      if (opts.to !== undefined && start >= opts.to) return;
+      words.push({ text: w.text, start: round3(start), end: round3(end), confidence: w.confidence, assetId: clip.assetId, index, clipId: clip.id });
+    });
   }
   words.sort((a, b) => a.start - b.start);
   // drop words that duplicate a simultaneous source (e.g. same audio on two tracks)
-  const out: Word[] = [];
+  const out: TimelineWord[] = [];
   for (const w of words) {
     const prev = out[out.length - 1];
     if (prev && prev.text.trim().toLowerCase() === w.text.trim().toLowerCase() && Math.abs(prev.start - w.start) < 0.05) continue;
@@ -510,6 +518,10 @@ export const timelineWords = (
   }
   return out;
 };
+
+/** Words placed on the timeline by mapping each speech clip's source transcript. */
+export const timelineWords = (p: Project, transcripts: Record<string, Word[]>, opts: { trackIds?: string[]; from?: number; to?: number } = {}): Word[] =>
+  timelineWordsDetailed(p, transcripts, opts).map(({ text, start, end, confidence }) => ({ text, start, end, confidence }));
 
 export const captionWords = (p: Project, clip: CaptionsClip, transcripts: Record<string, Word[]>): Word[] => {
   const from = clip.start;
@@ -852,3 +864,27 @@ export const summarizeProject = (p: Project): string => {
 };
 
 export const isAudioClip = (c: Clip): c is AudioClip => c.type === 'audio';
+
+// ---------------------------------------------------------------------------
+// Transcript-driven cuts (text-based editing)
+// ---------------------------------------------------------------------------
+
+/** Timeline ranges covering filler words ("um", "uh"…), merged when adjacent. */
+export const fillerRanges = (words: Word[], fillers = DEFAULT_FILLERS): Interval[] =>
+  mergeIntervals(
+    words.filter((w) => isFiller(w.text, fillers)).map((w) => [w.start, w.end] as Interval),
+    0.02,
+  );
+
+/** Ranges that shorten every pause longer than `max` seconds down to `keep` seconds. */
+export const pauseRanges = (words: Word[], max = 0.7, keep = 0.3): Interval[] => {
+  const out: Interval[] = [];
+  for (let i = 1; i < words.length; i++) {
+    const gap = words[i]!.start - words[i - 1]!.end;
+    if (gap > max) out.push([round3(words[i - 1]!.end + keep / 2), round3(words[i]!.start - keep / 2)]);
+  }
+  return out;
+};
+
+/** Total seconds a set of ranges removes. */
+export const rangesDuration = (ranges: Interval[]): number => round3(ranges.reduce((n, [a, b]) => n + Math.max(0, b - a), 0));

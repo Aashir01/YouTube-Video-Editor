@@ -12,8 +12,8 @@ const Transition = z.object({ type: z.enum(TRANSITION_TYPES), duration: z.number
 
 const CLIP_REFERENCE = `Clip fields (times in seconds, positions 0-1 of the canvas, sizes in design px where 1u = 1px at 1080p):
 - all: type, start, duration, name?, transitionIn/transitionOut {type: ${TRANSITION_TYPES.join('|')}, duration}
-- video: assetId, trimStart (source offset), speed, volume (0-2), muted, fit cover|contain|fill, zooms [{at (s from clip start), duration, scale, x, y, style smooth|snap|slow-push}], kenBurns {fromScale,toScale,fromX,fromY,toX,toY,easing}, box {x,y,w,h} (picture-in-picture), radius, shadow, opacity, rotation, flipX, grade {preset none|cinematic|warm|cool|vibrant|muted|bw|vintage|teal-orange|punchy, brightness, contrast, saturation, hue, vignette, blur}, audioFadeIn, audioFadeOut
-- image: assetId, fit, kenBurns, blurredBackdrop, box, radius, shadow, opacity, grade
+- video: assetId, trimStart (source offset), speed, volume (0-2), muted, fit cover|contain|fill, focus {x,y} (0-1 point kept in frame when cropped: reframe 16:9 footage for 9:16, e.g. the speaker's face), scale (static zoom, 1 = fitted), zooms [{at (s from clip start), duration, scale, x, y, style smooth|snap|slow-push}], kenBurns {fromScale,toScale,fromX,fromY,toX,toY,easing}, box {x,y,w,h} (picture-in-picture), radius, shadow, opacity, rotation, flipX, grade {preset none|cinematic|warm|cool|vibrant|muted|bw|vintage|teal-orange|punchy, brightness, contrast, saturation, hue, vignette, blur}, audioFadeIn, audioFadeOut
+- image: assetId, fit, focus, scale, kenBurns, blurredBackdrop, box, radius, shadow, opacity, grade
 - audio: assetId, role voiceover|music|sfx|original, trimStart, speed, volume, fadeIn, fadeOut, duck (lower under speech), loop
 - text: text (wrap words in *asterisks* to highlight), x, y (center anchor), style {font, size, weight, color, align, uppercase, background, padding, radius, strokeColor, strokeWidth, shadow, highlightColor, maxWidth}, animationIn/animationOut none|fade|rise|pop|slide-left|slide-right|typewriter|words|letters|blur-in|scale-down
 - scene: template, props (see list_templates) — prefer add_scene
@@ -21,7 +21,7 @@ const CLIP_REFERENCE = `Clip fields (times in seconds, positions 0-1 of the canv
 Tracks can be referenced by id or name: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX.`;
 
 const OpItem = z.object({
-  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix']),
+  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'liftRange', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix', 'addMarker', 'removeMarker']),
   clip: z.record(z.string(), z.unknown()).optional().describe('addClip: the clip object'),
   clipId: z.string().optional(),
   clipIds: z.array(z.string()).optional(),
@@ -39,6 +39,9 @@ const OpItem = z.object({
   index: z.number().int().optional(),
   onConflict: z.enum(['error', 'new-track', 'overwrite', 'allow']).optional(),
   ripple: z.boolean().optional(),
+  time: z.number().optional().describe('addMarker: seconds'),
+  label: z.string().optional().describe('addMarker: marker text'),
+  markerId: z.string().optional(),
 });
 
 const resolveTrackIds = (p: Project, ids?: string[]) => ids?.map((t) => requireTrack(p, t).id);
@@ -64,6 +67,12 @@ const toEditOp = (p: Project, o: z.infer<typeof OpItem>): EditOp => {
       return { op: 'splitClip', clipId: need(o.clipId, 'clipId'), at: need(o.at, 'at') };
     case 'rippleDelete':
       return { op: 'rippleDelete', from: need(o.from, 'from'), to: need(o.to, 'to'), trackIds: resolveTrackIds(p, o.trackIds) };
+    case 'liftRange':
+      return { op: 'liftRange', from: need(o.from, 'from'), to: need(o.to, 'to'), trackIds: resolveTrackIds(p, o.trackIds) };
+    case 'addMarker':
+      return { op: 'addMarker', time: need(o.time, 'time'), label: o.label };
+    case 'removeMarker':
+      return { op: 'removeMarker', markerId: need(o.markerId, 'markerId') };
     case 'shiftClips':
       return { op: 'shiftClips', from: need(o.from, 'from'), delta: need(o.delta, 'delta'), trackIds: resolveTrackIds(p, o.trackIds) };
     case 'closeGaps':
@@ -84,7 +93,7 @@ const toEditOp = (p: Project, o: z.infer<typeof OpItem>): EditOp => {
 export const applyEdits = defineTool({
   name: 'apply_edits',
   category: 'edit',
-  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?}, shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}. onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
+  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?} (cut a range and close the gap), liftRange {from, to, trackIds?} (clear a range, leave the gap), shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}, addMarker {time, label?} (review notes for the user), removeMarker {markerId}. onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
   schema: z.object({ label: z.string().describe('Short description for undo history'), ops: z.array(OpItem).min(1).max(80) }),
   execute: async (input, ctx) => {
     let results: unknown[] = [];

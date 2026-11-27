@@ -10,7 +10,7 @@ import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
-export type LeftTab = 'media' | 'graphics' | 'script' | 'audio' | 'brand';
+export type LeftTab = 'media' | 'transcript' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
 export type SettingsSection = 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
@@ -47,6 +47,14 @@ interface StudioStore {
   // editor
   time: number;
   playing: boolean;
+  /** Preview playback speed (negative = reverse, used by J/K/L shuttle). */
+  playbackRate: number;
+  /** In/out range on the timeline (I / O keys). */
+  range: [number, number] | null;
+  /** Loop playback inside the range. */
+  loopRange: boolean;
+  /** Timeline track height multiplier. */
+  trackScale: number;
   selection: string[];
   zoom: number;
   /** Timeline zoom follows the video length until the user zooms by hand. */
@@ -58,6 +66,12 @@ interface StudioStore {
   composerFocusTick: number;
   /** Text to place in the chat composer (e.g. a brief typed before an AI model was configured). */
   composerPrefill: string | null;
+  /** Edits not yet confirmed by the server (in flight or waiting to be sent). */
+  unsaved: number;
+  /** Undo several steps (history menu). */
+  undoSteps: (n: number) => Promise<void>;
+  /** Open recorder (voice / camera / screen), or null. */
+  recorder: 'voice' | 'camera' | 'screen' | null;
   /** Asset ids attached to the next chat message. */
   composerAttachments: string[];
   attachToChat: (assetIds: string[]) => void;
@@ -156,7 +170,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       case 'project':
         // our own edits come back in the HTTP response; skip their echo while requests are in flight
         if (e.source === 'user' && (pendingOps > 0 || queued.size > 0)) return;
-        setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo });
+        setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo, past: e.past });
         return;
       case 'agent':
         set({ chat: applyAgentEvent(get().chat, e.event) });
@@ -218,6 +232,10 @@ export const useStudio = create<StudioStore>((set, get) => {
 
     time: 0,
     playing: false,
+    playbackRate: 1,
+    range: null,
+    loopRange: false,
+    trackScale: prefs.get('trackScale', 1),
     selection: [],
     zoom: prefs.get('zoom', 0),
     autoFit: true,
@@ -228,6 +246,11 @@ export const useStudio = create<StudioStore>((set, get) => {
     composerFocusTick: 0,
     composerPrefill: null,
     composerAttachments: [],
+    recorder: null,
+    unsaved: 0,
+    undoSteps: async (n) => {
+      for (let i = 0; i < n && get().history.canUndo; i++) await get().undo();
+    },
     attachToChat: (ids) => {
       set({ composerAttachments: [...new Set([...get().composerAttachments, ...ids])] });
       get().focusComposer();
@@ -236,7 +259,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     openProject: async (id) => {
       disconnect?.();
       transcriptSig = '';
-      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [] });
+      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
       try {
         const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
         if (get().projectId !== id) return;
@@ -278,6 +301,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         return null;
       }
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       const seq = ++opSeq;
       // requests run one after another so the server sees edits in the order they were made
       const request = opChain.then(() => api.ops(projectId, ops, label));
@@ -293,6 +317,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         return null;
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 
@@ -309,6 +334,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       }
       const prev = queued.get(key);
       queued.set(key, { op: prev ? mergeOps(prev.op, op) : op, label });
+      set({ unsaved: pendingOps + queued.size });
       if (queueTimer) clearTimeout(queueTimer);
       queueTimer = setTimeout(() => get().flushEdits(), 450);
     },
@@ -319,6 +345,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       if (queued.size === 0) return;
       const items = [...queued.values()];
       queued.clear();
+      set({ unsaved: pendingOps + queued.size });
       void get().edit(
         items.map((i) => i.op),
         items.length === 1 ? items[0]!.label : `${items[0]!.label} (+${items.length - 1})`,
@@ -330,6 +357,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       const id = get().projectId;
       if (!id) return;
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       try {
         const r = await api.undo(id);
         setProject(r.project, r.history);
@@ -338,6 +366,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         toast.error(errorText(err));
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 
@@ -346,6 +375,7 @@ export const useStudio = create<StudioStore>((set, get) => {
       const id = get().projectId;
       if (!id) return;
       pendingOps++;
+      set({ unsaved: pendingOps + queued.size });
       try {
         const r = await api.redo(id);
         setProject(r.project, r.history);
@@ -354,6 +384,7 @@ export const useStudio = create<StudioStore>((set, get) => {
         toast.error(errorText(err));
       } finally {
         pendingOps--;
+        set({ unsaved: pendingOps + queued.size });
       }
     },
 
@@ -422,9 +453,10 @@ export const clipLabel = (clip: Clip, p?: Project | null): string => {
 
 /** Editor state the agent should know about (sent alongside chat messages, not shown in the chat). */
 export const editorContext = (): string => {
-  const { project, time, selection } = useStudio.getState();
+  const { project, time, selection, range } = useStudio.getState();
   if (!project) return '';
   const lines = [`Playhead: ${formatTime(time)} (of ${formatTime(projectDuration(project))})`];
+  if (range) lines.push(`In/out range: ${formatTime(range[0])}–${formatTime(range[1])} (${(range[1] - range[0]).toFixed(2)}s) — "this part" means this range`);
   const refs = selection.map((id) => getClipRef(project, id)).filter((r): r is NonNullable<typeof r> => Boolean(r));
   if (refs.length) {
     lines.push('Selected clips:');

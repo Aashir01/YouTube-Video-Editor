@@ -1,8 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AudioLines,
+  AudioWaveform,
+  Camera,
   Captions,
+  Circle,
   CirclePlus,
   Ellipsis,
   FileText,
@@ -11,6 +14,7 @@ import {
   ImagePlus,
   Link2,
   Mic,
+  MonitorUp,
   Paperclip,
   Scissors,
   Search,
@@ -23,6 +27,7 @@ import type { Asset } from '../../../../shared/schema';
 import { api, mediaUrl, type StockResult } from '../../../lib/api';
 import { useStudio } from '../../../lib/store';
 import { addAtPlayhead, clearDragPayload, setDragPayload } from '../../../lib/dnd';
+import { enhanceSpeech } from '../../../lib/actions';
 import { cn, errorText, formatBytes, formatClock } from '../../../lib/utils';
 import { Badge, Empty, Menu, Segmented, Spinner, TextArea } from '../../ui';
 import { PanelHeader } from '../LeftPanel';
@@ -120,6 +125,7 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
             ...(speech
               ? [
                   { label: tr === 'done' ? 'Re-transcribe' : 'Transcribe', icon: <Captions />, onSelect: () => void api.transcribe(projectId, asset.id).then(() => toast('Transcription started')).catch((e) => toast.error(errorText(e))) },
+                  { label: 'Enhance speech', icon: <AudioWaveform />, onSelect: () => void enhanceSpeech(asset.id) },
                   {
                     label: 'Auto-cut silences & fillers',
                     icon: <Scissors />,
@@ -186,6 +192,12 @@ const ProjectMedia: React.FC = () => {
   const list = assets.filter((a) => filter === 'all' || a.kind === filter || (filter === 'document' && a.kind === 'other')).slice().reverse();
   const sel = assets.find((a) => a.id === selected);
 
+  useEffect(() => {
+    const open = () => fileInput.current?.click();
+    window.addEventListener('cutroom:upload', open);
+    return () => window.removeEventListener('cutroom:upload', open);
+  }, []);
+
   const importUrl = () => {
     const url = prompt('Paste a direct link to a video, image, audio file or document:');
     if (!url) return;
@@ -218,6 +230,18 @@ const ProjectMedia: React.FC = () => {
           {progress !== null ? <Spinner /> : <Upload className="size-4" />}
           {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : 'Upload'}
         </button>
+        <Menu
+          trigger={
+            <button className="btn btn-icon" title="Record voice, camera or screen" aria-label="Record">
+              <Circle className="size-4 text-danger" fill="currentColor" />
+            </button>
+          }
+          items={[
+            { label: 'Record voiceover', icon: <Mic />, onSelect: () => useStudio.setState({ recorder: 'voice' }) },
+            { label: 'Record camera', icon: <Camera />, onSelect: () => useStudio.setState({ recorder: 'camera' }) },
+            { label: 'Record screen', icon: <MonitorUp />, onSelect: () => useStudio.setState({ recorder: 'screen' }) },
+          ]}
+        />
         <button className="btn btn-icon" title="Import from URL" onClick={importUrl}>
           <Link2 className="size-4" />
         </button>

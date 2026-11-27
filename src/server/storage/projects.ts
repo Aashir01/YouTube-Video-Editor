@@ -191,7 +191,7 @@ export class ProjectStore {
   private emitProject(id: string, label: string, source: UpdateSource) {
     const s = this.states.get(id);
     if (!s) return;
-    bus.emit(id, { type: 'project', project: s.project, label, source, canUndo: s.past.length > 0, canRedo: s.future.length > 0 });
+    bus.emit(id, { type: 'project', project: s.project, label, source, canUndo: s.past.length > 0, canRedo: s.future.length > 0, past: s.past.slice(-20).map((h) => h.label).reverse() });
   }
 
   async undo(id: string): Promise<{ project: Project; label: string } | null> {
@@ -253,6 +253,32 @@ export class ProjectStore {
   async remove(id: string): Promise<void> {
     this.states.delete(id);
     await fsp.rm(this.dir(id), { recursive: true, force: true });
+  }
+
+  /**
+   * Make a new project from a transformed copy of another one (e.g. a Short cut from a long video).
+   * Only the assets the result still uses come along, hard-linked when possible (no extra disk space).
+   */
+  async derive(id: string, name: string, build: (draft: Project) => void): Promise<Project> {
+    const src = await this.get(id);
+    const draft = structuredClone(src);
+    draft.renders = [];
+    build(draft);
+    const used = new Set<string>();
+    for (const t of draft.tracks) for (const c of t.clips) if ('assetId' in c) used.add(c.assetId);
+    for (const t of draft.tracks) for (const c of t.clips) if (c.type === 'scene') for (const v of Object.values(c.props)) if (typeof v === 'string' && v.startsWith('asset_')) used.add(v);
+    if (draft.brand.logoAssetId) used.add(draft.brand.logoAssetId);
+    draft.assets = draft.assets.filter((a) => used.has(a.id));
+    const copy = await this.create({ name }, draft);
+    for (const a of draft.assets) {
+      const files = [a.file, a.thumb, a.waveform, a.filmstrip?.file, a.text?.file, this.transcriptFile(a.id)].filter((f): f is string => Boolean(f));
+      for (const f of files) {
+        const from = this.mediaPath(id, f);
+        const to = this.mediaPath(copy.id, f);
+        await fsp.link(from, to).catch(() => fsp.copyFile(from, to)).catch(() => undefined);
+      }
+    }
+    return copy;
   }
 
   async duplicate(id: string, name?: string): Promise<Project> {

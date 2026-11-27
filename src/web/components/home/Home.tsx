@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   ArrowRight,
@@ -11,12 +11,16 @@ import {
   FileText,
   Film,
   KeyRound,
+  ListOrdered,
   Mic,
   Monitor,
+  MonitorPlay,
   Music,
+  Pencil,
   Play,
   Scissors,
   ScrollText,
+  Search,
   Settings,
   Smartphone,
   Sparkles,
@@ -30,7 +34,8 @@ import { useStudio } from '../../lib/store';
 import { navigate } from '../../lib/nav';
 import { cn, errorText, formatClock, timeAgo } from '../../lib/utils';
 import { Logo } from '../icons';
-import { Empty, IconBtn, Menu, Segmented, Spinner } from '../ui';
+import { Empty, IconBtn, Menu, Segmented, SelectField, Spinner } from '../ui';
+import { prefs } from '../../lib/prefs';
 
 type Format = 'long' | 'short';
 type Mode = 'generate' | 'edit' | 'hybrid';
@@ -48,11 +53,14 @@ export const takeKickoff = (projectId: string): string | null => {
   }
 };
 
-const EXAMPLES: { text: string; format: Format; mode: Mode; icon: React.ElementType; hue: string }[] = [
-  { text: 'A 5-minute explainer on how black holes form, with animated diagrams and a calm voiceover', format: 'long', mode: 'generate', icon: Sparkles, hue: 'text-hue-violet' },
-  { text: 'Edit my talking-head recording: cut silences and filler words, add captions, zooms and b-roll', format: 'long', mode: 'edit', icon: Scissors, hue: 'text-hue-ember' },
-  { text: 'A punchy 45-second Short: 3 productivity tips for students', format: 'short', mode: 'generate', icon: Smartphone, hue: 'text-hue-pink' },
-  { text: 'Turn my notes and screenshots into a product walkthrough video', format: 'long', mode: 'hybrid', icon: FileText, hue: 'text-hue-mint' },
+/** Starting points: a brief template ("___" is where your topic goes), format and mode. */
+const RECIPES: { title: string; hint: string; text: string; format: Format; mode: Mode; icon: React.ElementType; hue: string }[] = [
+  { title: 'Faceless explainer', hint: 'voiceover, diagrams, b-roll', text: 'A 6-minute faceless explainer about ___ for curious beginners, with a calm AI voiceover, animated diagrams and stock b-roll.', format: 'long', mode: 'generate', icon: Sparkles, hue: 'text-hue-violet' },
+  { title: 'Talking-head edit', hint: 'cuts, zooms, captions', text: 'Edit my talking-head recording about ___: cut silences and filler words, add punch-in zooms, captions, b-roll and a music bed.', format: 'long', mode: 'edit', icon: Scissors, hue: 'text-hue-ember' },
+  { title: 'Top-10 list', hint: 'countdown, big numbers', text: 'A top-10 countdown video about ___ with a big-number graphic for each item, punchy pacing and a strong number-one reveal.', format: 'long', mode: 'generate', icon: ListOrdered, hue: 'text-hue-amber' },
+  { title: 'Tutorial', hint: 'screen recording, callouts', text: 'A step-by-step tutorial on ___ from my screen recording: zoom into the important parts, add callouts, chapters and a clear voiceover.', format: 'long', mode: 'edit', icon: MonitorPlay, hue: 'text-hue-sky' },
+  { title: 'YouTube Short', hint: '45s, hook, bold captions', text: 'A punchy 45-second vertical Short about ___ with a strong first-second hook, bold captions and fast cuts.', format: 'short', mode: 'generate', icon: Smartphone, hue: 'text-hue-pink' },
+  { title: 'Podcast → Shorts', hint: 'best moments, reframed', text: 'Turn my podcast episode about ___ into vertical Shorts: find the 3 most engaging moments, reframe to 9:16 and add bold captions.', format: 'short', mode: 'edit', icon: Mic, hue: 'text-hue-mint' },
 ];
 
 /** The stages the Director works through, shown under the prompt. */
@@ -74,6 +82,22 @@ export const Home: React.FC = () => {
   const [format, setFormat] = useState<Format>('long');
   const [mode, setMode] = useState<Mode>('hybrid');
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'recent' | 'name' | 'longest'>(() => prefs.get('projectSort', 'recent'));
+  const promptBox = useRef<HTMLTextAreaElement>(null);
+
+  const pickRecipe = (r: (typeof RECIPES)[number]) => {
+    setTopic(r.text);
+    setFormat(r.format);
+    setMode(r.mode);
+    requestAnimationFrame(() => {
+      const el = promptBox.current;
+      if (!el) return;
+      el.focus();
+      const at = r.text.indexOf('___');
+      if (at >= 0) el.setSelectionRange(at, at + 3);
+    });
+  };
 
   const load = () =>
     api
@@ -167,6 +191,7 @@ export const Home: React.FC = () => {
             <div className="pointer-events-none absolute -inset-6 rounded-[32px] bg-[radial-gradient(60%_60%_at_50%_50%,rgb(255_90_31/0.14),transparent_70%)] blur-xl" />
             <div className="glass ring-gradient relative rounded-2xl border-transparent p-3 shadow-[0_30px_90px_-24px_rgb(0_0_0/0.9)]">
               <textarea
+                ref={promptBox}
                 value={topic}
                 autoFocus
                 rows={3}
@@ -205,24 +230,26 @@ export const Home: React.FC = () => {
             </div>
           </div>
 
-          <div className="mx-auto mt-5 grid max-w-3xl gap-2 sm:grid-cols-2">
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex.text}
-                onClick={() => {
-                  setTopic(ex.text);
-                  setFormat(ex.format);
-                  setMode(ex.mode);
-                }}
-                className="glass group flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs text-muted transition-all hover:-translate-y-px hover:border-white/20 hover:text-text"
-                title={ex.text}
-              >
-                <span className={cn('tile size-7', ex.hue)}>
-                  <ex.icon className="size-3.5" />
-                </span>
-                <span className="line-clamp-2 leading-snug">{ex.text}</span>
-              </button>
-            ))}
+          <div className="mx-auto mt-5 max-w-3xl">
+            <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-dim">or start from a recipe</div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {RECIPES.map((r) => (
+                <button
+                  key={r.title}
+                  onClick={() => pickRecipe(r)}
+                  className="glass group flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all hover:-translate-y-px hover:border-white/20"
+                  title={r.text}
+                >
+                  <span className={cn('tile size-8', r.hue)}>
+                    <r.icon className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-text">{r.title}</span>
+                    <span className="block truncate text-[11px] text-dim">{r.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mx-auto mt-7 flex max-w-3xl flex-wrap items-center justify-center gap-x-1 gap-y-2">
@@ -249,9 +276,32 @@ export const Home: React.FC = () => {
               Your videos
               {projects && projects.length > 0 && <span className="rounded-full bg-panel-3 px-2 py-px text-[11px] font-semibold text-muted">{projects.length}</span>}
             </h2>
-            <button className="btn btn-sm" onClick={() => void create({ demo: true })} disabled={creating}>
-              <Play className="size-3.5 text-accent" fill="currentColor" /> Open a demo project
-            </button>
+            <div className="flex items-center gap-2">
+              {projects && projects.length > 3 && (
+                <>
+                  <label className="hidden items-center gap-1.5 rounded-lg border border-line bg-black/25 px-2 focus-within:border-accent/70 sm:flex">
+                    <Search className="size-3.5 text-dim" />
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search videos" className="w-36 bg-transparent py-1 text-xs outline-none focus-visible:outline-none" />
+                  </label>
+                  <SelectField
+                    className="w-32 py-1 text-xs"
+                    value={sort}
+                    onChange={(v) => {
+                      prefs.set('projectSort', v);
+                      setSort(v as typeof sort);
+                    }}
+                    options={[
+                      { value: 'recent', label: 'Recent first' },
+                      { value: 'name', label: 'By name' },
+                      { value: 'longest', label: 'Longest first' },
+                    ]}
+                  />
+                </>
+              )}
+              <button className="btn btn-sm" onClick={() => void create({ demo: true })} disabled={creating}>
+                <Play className="size-3.5 text-accent" fill="currentColor" /> Open a demo project
+              </button>
+            </div>
           </div>
           {projects === null ? (
             <div className="flex justify-center py-12">
@@ -265,9 +315,12 @@ export const Home: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-              {projects.map((p) => (
-                <ProjectCard key={p.id} p={p} onChanged={load} />
-              ))}
+              {projects
+                .filter((p) => !query.trim() || `${p.name} ${p.topic}`.toLowerCase().includes(query.trim().toLowerCase()))
+                .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : sort === 'longest' ? b.duration - a.duration : b.updatedAt.localeCompare(a.updatedAt)))
+                .map((p) => (
+                  <ProjectCard key={p.id} p={p} onChanged={load} />
+                ))}
             </div>
           )}
         </section>
@@ -345,6 +398,18 @@ const ProjectCard: React.FC<{ p: ProjectSummary; onChanged: () => void }> = ({ p
           }
           items={[
             { label: 'Open', icon: <Play />, onSelect: () => navigate(p.id) },
+            {
+              label: 'Rename',
+              icon: <Pencil />,
+              onSelect: () => {
+                const name = prompt('Rename video', p.name)?.trim();
+                if (name && name !== p.name)
+                  void api
+                    .ops(p.id, [{ op: 'renameProject', name }], 'Rename project')
+                    .then(onChanged)
+                    .catch((e) => toast.error(errorText(e)));
+              },
+            },
             {
               label: 'Duplicate',
               icon: <Copy />,

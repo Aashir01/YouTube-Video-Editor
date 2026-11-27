@@ -5,7 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { WordSchema } from '../../shared/schema';
 import { applyOps, describeOps, type EditOp } from '../../shared/ops';
-import { lintProject } from '../../shared/timeline';
+import { lintProject, projectDuration } from '../../shared/timeline';
 import { createDemoProject } from '../../shared/sample';
 import { TEMPLATE_IDS, templateCatalog } from '../../shared/templates';
 import { FONTS } from '../../shared/fonts';
@@ -13,7 +13,7 @@ import { APP_ROOT, DATA_DIR, getSavedSettings, getSettings, maskedSettings, merg
 import { bus } from '../events';
 import { store } from '../storage/projects';
 import { serveFile, receiveUploads } from '../http/files';
-import { attachSubtitles, analyzeAsset, downloadToProject, queueTranscription, registerAsset } from '../media/ingest';
+import { attachSubtitles, analyzeAsset, downloadToProject, ensureFilmstrip, queueTranscription, registerAsset } from '../media/ingest';
 import { ffInfo } from '../media/ffmpeg';
 import { libraryFile, listLibrary } from '../media/sfx';
 import { cancelRender, renderFrames, renderThumbnail, startRender, RENDER_PRESETS, type RenderPreset } from '../render/render';
@@ -22,6 +22,8 @@ import { localWhisperAvailable, pickTranscriptionEngine } from '../services/tran
 import { listModels, testModel } from '../ai/llm';
 import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
+import { createShort } from '../shorts';
+import { importOptional } from '../optional';
 
 export const api = new Hono();
 
@@ -44,7 +46,7 @@ api.get('/system', async (c) => {
   const [stt, tts] = await Promise.all([pickTranscriptionEngine(s), pickTtsEngine(s)]);
   let kokoro = false;
   try {
-    await import('kokoro-js');
+    await importOptional('kokoro-js');
     kokoro = true;
   } catch {
     /* optional */
@@ -139,6 +141,15 @@ api.delete('/projects/:id', async (c) => {
 });
 
 api.post('/projects/:id/duplicate', async (c) => c.json(await store.duplicate(c.req.param('id'))));
+
+/** Cut time ranges of this video into a new vertical Short project. */
+api.post('/projects/:id/shorts', async (c) => {
+  const body = z
+    .object({ ranges: z.array(z.tuple([z.number(), z.number()])).min(1).max(20), title: z.string().max(120).optional(), focusX: z.number().min(0).max(1).optional() })
+    .parse(await c.req.json());
+  const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
+  return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
+});
 
 api.post('/projects/:id/ops', async (c) => {
   const id = c.req.param('id');
@@ -254,7 +265,7 @@ api.put('/projects/:id/assets/:assetId/transcript', async (c) => {
   await store.update(id, 'Edit transcript', (p) => {
     const a = p.assets.find((x) => x.id === assetId);
     if (a) a.transcript = { ...a.transcript, status: 'done', file, wordCount: words.length, engine: a.transcript.engine ?? 'manual', preview: words.slice(0, 60).map((w) => w.text).join(' ') };
-  }, { source: 'user' });
+  }, { source: 'user', history: false }); // a spelling fix, not an edit: undo can't restore transcript files anyway
   return c.json({ ok: true });
 });
 
@@ -271,6 +282,11 @@ api.post('/projects/:id/assets/:assetId/attach-subtitles', async (c) => {
   return c.json({ words: await attachSubtitles(c.req.param('id'), c.req.param('assetId'), subtitleAssetId) });
 });
 
+api.post('/projects/:id/assets/:assetId/filmstrip', async (c) => {
+  await ensureFilmstrip(c.req.param('id'), c.req.param('assetId'));
+  return c.json({ ok: true });
+});
+
 api.post('/projects/:id/assets/:assetId/analyze', async (c) => {
   await analyzeAsset(c.req.param('id'), c.req.param('assetId'));
   return c.json({ ok: true });
@@ -282,7 +298,7 @@ api.post('/projects/:id/assets/:assetId/analyze', async (c) => {
 
 api.post('/projects/:id/render', async (c) => {
   const body = z
-    .object({ preset: z.enum(Object.keys(RENDER_PRESETS) as [RenderPreset, ...RenderPreset[]]).optional(), range: z.tuple([z.number(), z.number()]).optional(), normalize: z.boolean().optional() })
+    .object({ preset: z.enum(Object.keys(RENDER_PRESETS) as [RenderPreset, ...RenderPreset[]]).optional(), range: z.tuple([z.number(), z.number()]).optional(), normalize: z.boolean().optional(), audioOnly: z.boolean().optional() })
     .parse(await c.req.json().catch(() => ({})));
   return c.json(await startRender(c.req.param('id'), body));
 });
@@ -293,7 +309,7 @@ api.delete('/projects/:id/render/:renderId', async (c) => {
   const id = c.req.param('id');
   const renderId = c.req.param('renderId');
   cancelRender(renderId);
-  for (const ext of ['.mp4', '.srt', '.raw.mp4']) await fsp.rm(store.renderPath(id, `${renderId}${ext}`), { force: true });
+  for (const ext of ['.mp4', '.mp3', '.m4a', '.srt', '.raw.mp4', '.raw.wav']) await fsp.rm(store.renderPath(id, `${renderId}${ext}`), { force: true });
   await store.update(id, 'Delete render', (p) => void (p.renders = p.renders.filter((r) => r.id !== renderId)), { history: false, source: 'user' });
   return c.json({ ok: true });
 });

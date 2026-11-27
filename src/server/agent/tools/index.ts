@@ -1,14 +1,14 @@
 import type { AgentTool } from '../types';
 import { askUser, delegate, loadSkill, updatePlan } from './conversation';
 import { checkTimeline, getProjectTool, getTimeline, setBrand, setBrief, setCanvas } from './project';
-import { analyzeMedia, annotateAsset, getTranscript, inspectAssets, readDocument, searchTranscript, transcribe, viewMedia } from './assets';
+import { analyzeMedia, annotateAsset, enhanceAudio, getTranscript, inspectAssets, readDocument, searchTranscript, transcribe, viewMedia } from './assets';
 import { fetchUrl, webSearchTool } from './research';
 import { generateVoiceover, listVoicesTool, writeScript } from './script';
 import { addCaptions, addMedia, addScene, applyEdits, autoCut } from './edit';
 import { addLibrarySound, generateAudio, generateImageTool, importStock, searchStockTool } from './generate';
 import { listTemplates, writeCodeScene } from './motion';
 import { previewFrames } from './review';
-import { designThumbnail, renderVideo, setYouTubeMetadata } from './publish';
+import { createShortTool, designThumbnail, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
@@ -30,6 +30,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   viewMedia,
   readDocument,
   annotateAsset,
+  enhanceAudio,
   webSearchTool,
   fetchUrl,
   writeScript,
@@ -52,6 +53,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   setYouTubeMetadata,
   designThumbnail,
   renderVideo,
+  createShortTool,
   uploadToYouTube,
 ];
 

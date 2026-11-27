@@ -8,7 +8,22 @@ import { prefs } from '../../lib/prefs';
 import { navigate } from '../../lib/nav';
 import { cn, clamp, errorText, isTypingTarget } from '../../lib/utils';
 import { takeKickoff } from '../home/Home';
-import { deleteSelection, duplicateSelection, splitAtPlayhead } from '../../lib/actions';
+import {
+  addMarkerAtPlayhead,
+  clearRangeMarks,
+  copySelection,
+  deleteSelection,
+  duplicateSelection,
+  jumpToEdit,
+  markIn,
+  markOut,
+  nudgeSelection,
+  pasteAtPlayhead,
+  rippleTrim,
+  selectAll,
+  shuttle,
+  splitAtPlayhead,
+} from '../../lib/actions';
 import { Empty, Spinner } from '../ui';
 import { TopBar } from './TopBar';
 import { Preview } from './Preview';
@@ -17,6 +32,10 @@ import { LeftPanel } from './LeftPanel';
 import { Inspector } from './Inspector';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ExportDialog } from './ExportDialog';
+import { RecordDialog } from './RecordDialog';
+import { ErrorBoundary } from '../ErrorBoundary';
+import { CommandPalette } from './CommandPalette';
+import { ShortcutsDialog } from './ShortcutsDialog';
 
 /** Drag handle between panels. */
 const Resizer: React.FC<{ dir: 'x' | 'y'; onDrag: (delta: number) => void; className?: string }> = ({ dir, onDrag, className }) => (
@@ -51,60 +70,126 @@ const useShortcuts = () => {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        s.focusComposer();
+        window.dispatchEvent(new CustomEvent('cutroom:palette'));
         return;
       }
       if (isTypingTarget(e.target)) return;
       if (document.querySelector('[role="dialog"]')) return;
       const key = e.key.toLowerCase();
-      if (mod && key === 'z') {
-        e.preventDefault();
-        void (e.shiftKey ? s.redo() : s.undo());
-      } else if (mod && key === 'y') {
-        e.preventDefault();
-        void s.redo();
-      } else if (mod && key === 'd') {
-        e.preventDefault();
-        duplicateSelection();
-      } else if (mod && key === 'e') {
-        e.preventDefault();
-        s.setExportOpen(true);
-      } else if (mod && key === 'b') {
-        e.preventDefault();
-        splitAtPlayhead();
-      } else if (mod) {
+      if (mod) {
+        const run = (fn: () => void) => {
+          e.preventDefault();
+          fn();
+        };
+        if (key === 'z') run(() => void (e.shiftKey ? s.redo() : s.undo()));
+        else if (key === 'y') run(() => void s.redo());
+        else if (key === 'd') run(duplicateSelection);
+        else if (key === 'e') run(() => s.setExportOpen(true));
+        else if (key === 'b') run(splitAtPlayhead);
+        else if (key === 'c') run(() => copySelection(false));
+        else if (key === 'x') run(() => copySelection(true));
+        else if (key === 'v') run(pasteAtPlayhead);
+        else if (key === 'a') run(selectAll);
         return;
-      } else if (e.key === ' ') {
+      }
+      if (e.key === ' ') {
         e.preventDefault();
         player.toggle();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         const dir = e.key === 'ArrowLeft' ? -1 : 1;
-        player.step(dir * (e.shiftKey ? player.fps : 1));
+        if (e.altKey) nudgeSelection(dir * (e.shiftKey ? 10 : 1));
+        else player.step(dir * (e.shiftKey ? player.fps : 1));
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        jumpToEdit(e.key === 'ArrowUp' ? -1 : 1);
       } else if (e.key === 'Home') {
         player.seek(0);
       } else if (e.key === 'End') {
         player.toEnd();
       } else if (key === 's') {
         splitAtPlayhead();
+      } else if (key === 'q') {
+        rippleTrim('start');
+      } else if (key === 'w') {
+        rippleTrim('end');
+      } else if (key === 'i') {
+        markIn();
+      } else if (key === 'o') {
+        markOut();
+      } else if (key === 'x' && e.altKey) {
+        clearRangeMarks();
+      } else if (key === 'm') {
+        addMarkerAtPlayhead();
+      } else if (key === 'j' || key === 'k' || key === 'l') {
+        shuttle(key);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelection(e.shiftKey);
       } else if (e.key === 'Escape') {
-        s.select([]);
+        if (s.selection.length) s.select([]);
+        else clearRangeMarks();
       } else if (e.key === '=' || e.key === '+') {
         useStudio.setState({ autoFit: false });
         s.setZoom(clamp((s.zoom || 40) * 1.25, 2, 600));
       } else if (e.key === '-') {
         useStudio.setState({ autoFit: false });
         s.setZoom(clamp((s.zoom || 40) / 1.25, 2, 600));
+      } else if (e.key === '\\') {
+        useStudio.setState({ autoFit: true });
       } else if (e.key === '/') {
         e.preventDefault();
         s.focusComposer();
+      } else if (e.key === '?') {
+        window.dispatchEvent(new CustomEvent('cutroom:shortcuts'));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+};
+
+/** When the tab is in the background, flag the title and notify when the Director needs you or is done. */
+const useAttention = () => {
+  useEffect(() => {
+    const flag = (title: string, body: string) => {
+      if (!document.title.startsWith('● ')) document.title = `● ${document.title}`;
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          const n = new Notification(title, { body: body.slice(0, 180), tag: 'cutroom-director' });
+          n.onclick = () => {
+            window.focus();
+            n.close();
+          };
+        } catch {
+          /* notifications unavailable */
+        }
+      }
+    };
+    const pending = (s: ReturnType<typeof useStudio.getState>) => s.chat.messages.filter((m) => (m.role === 'question' && m.status === 'open') || (m.role === 'approval' && !m.decision)).length;
+    let lastStatus = useStudio.getState().chat.state.status;
+    let lastPending = pending(useStudio.getState());
+    const unsub = useStudio.subscribe((s) => {
+      const status = s.chat.state.status;
+      const open = pending(s);
+      if (document.hidden) {
+        if (open > lastPending) flag('The Director needs you', 'A question or approval is waiting in Cutroom.');
+        else if ((lastStatus === 'thinking' || lastStatus === 'working') && status === 'idle') {
+          const last = [...s.chat.messages].reverse().find((m) => m.role === 'assistant');
+          flag('The Director is done', last && last.role === 'assistant' ? last.text.replace(/[*#_`>]/g, '') : 'Your edit is ready.');
+        }
+      }
+      lastStatus = status;
+      lastPending = open;
+    });
+    const onVisible = () => {
+      if (!document.hidden) document.title = document.title.replace(/^● /, '');
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 };
 
@@ -124,6 +209,7 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
   const kicked = useRef(false);
 
   useShortcuts();
+  useAttention();
   useEffect(() => prefs.set('leftW', leftW), [leftW]);
   useEffect(() => prefs.set('rightW', rightW), [rightW]);
   useEffect(() => prefs.set('timelineH', timelineH), [timelineH]);
@@ -181,16 +267,22 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
       {/* floating glass panels with gutters (the gutters are the resize handles) */}
       <div className="flex min-h-0 flex-1 px-2 pb-2">
         <div style={{ width: leftW }} className="glass flex min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl">
-          <LeftPanel />
+          <ErrorBoundary name="side panel">
+            <LeftPanel />
+          </ErrorBoundary>
         </div>
         <Resizer dir="x" onDrag={(d) => setLeftW((w) => clamp(w + d, 240, 520))} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="glass min-h-0 flex-1 overflow-hidden rounded-2xl">
-            <Preview />
+            <ErrorBoundary name="preview">
+              <Preview />
+            </ErrorBoundary>
           </div>
           <Resizer dir="y" onDrag={(d) => setTimelineH((h) => clamp(h - d, 150, window.innerHeight * 0.7))} />
           <div style={{ height: timelineH }} className="glass shrink-0 overflow-hidden rounded-2xl">
-            <Timeline />
+            <ErrorBoundary name="timeline">
+              <Timeline />
+            </ErrorBoundary>
           </div>
         </div>
         <Resizer dir="x" onDrag={(d) => setRightW((w) => clamp(w - d, 320, 720))} />
@@ -205,10 +297,17 @@ export const Editor: React.FC<{ projectId: string }> = ({ projectId }) => {
               {selectionCount > 0 && <span className="rounded-full bg-panel-3 px-1.5 text-[10px] text-muted">{selectionCount}</span>}
             </TabButton>
           </div>
-          <div className="min-h-0 flex-1">{rightTab === 'director' ? <ChatPanel /> : <Inspector />}</div>
+          <div className="min-h-0 flex-1">
+            <ErrorBoundary name={rightTab === 'director' ? 'chat' : 'inspector'} key={rightTab}>
+              {rightTab === 'director' ? <ChatPanel /> : <Inspector />}
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
       <ExportDialog />
+      <RecordDialog />
+      <CommandPalette />
+      <ShortcutsDialog />
     </div>
   );
 };

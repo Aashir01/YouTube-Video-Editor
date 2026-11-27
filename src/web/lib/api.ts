@@ -142,13 +142,15 @@ export const api = {
   transcript: (id: string, assetId: string) => get<Word[]>(`/api/projects/${id}/assets/${assetId}/transcript`),
   saveTranscript: (id: string, assetId: string, words: Word[]) => send('PUT', `/api/projects/${id}/assets/${assetId}/transcript`, { words }),
 
-  render: (id: string, body: { preset?: string; range?: [number, number] }) => send<RenderRecord>('POST', `/api/projects/${id}/render`, body),
+  render: (id: string, body: { preset?: string; range?: [number, number]; audioOnly?: boolean }) => send<RenderRecord>('POST', `/api/projects/${id}/render`, body),
+  createShort: (id: string, ranges: [number, number][], title?: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/shorts`, { ranges, title }),
   cancelRender: (id: string, renderId: string) => send('POST', `/api/projects/${id}/render/${renderId}/cancel`),
   deleteRender: (id: string, renderId: string) => send('DELETE', `/api/projects/${id}/render/${renderId}`),
   renderPresets: () => get<{ id: string; label: string }[]>('/api/render-presets'),
   thumbnail: (id: string) => send<{ url: string }>('POST', `/api/projects/${id}/thumbnail`),
   frames: (id: string, times: number[]) => send<{ frames: { time: number; url: string }[]; errors: string[] }>('POST', `/api/projects/${id}/frames`, { times }),
   analyze: (id: string, assetId: string) => send('POST', `/api/projects/${id}/assets/${assetId}/analyze`),
+  filmstrip: (id: string, assetId: string) => send('POST', `/api/projects/${id}/assets/${assetId}/filmstrip`),
 
   /** Run an agent tool from an editor button (voiceover, stock import, auto-cut, captions…). */
   runTool: (id: string, name: string, input: Record<string, unknown> = {}) => send<{ text: string; summary?: string; imageUrls: string[] }>('POST', `/api/projects/${id}/tools/${name}`, input),

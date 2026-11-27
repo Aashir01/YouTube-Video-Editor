@@ -1,3 +1,4 @@
+import fsp from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -186,6 +187,56 @@ export const thumbnail = async (input: string, output: string, atSec = 0, width 
   await must('ffmpeg', ['-y', ...args, '-frames:v', '1', '-vf', `scale=${width}:-2`, '-q:v', '4', output]);
 };
 
+/**
+ * A horizontal sprite of evenly spaced frames for the timeline filmstrip.
+ * Long videos decode keyframes only, which is fast and plenty for a strip.
+ */
+export const filmstrip = async (input: string, output: string, duration: number, srcW: number, srcH: number, tileH = 64): Promise<{ count: number; interval: number; tileW: number; tileH: number }> => {
+  const count = Math.max(4, Math.min(100, Math.ceil(duration / 2)));
+  const tileW = Math.max(2, Math.round((tileH * (srcW || 16)) / (srcH || 9) / 2) * 2);
+  const rate = (count / Math.max(0.1, duration)).toFixed(6);
+  const fast = duration > 300 ? ['-skip_frame', 'nokey'] : [];
+  await must('ffmpeg', ['-y', ...fast, '-i', input, '-an', '-vf', `fps=${rate},scale=${tileW}:${tileH},tile=${count}x1`, '-frames:v', '1', '-q:v', '5', output], { timeoutMs: 10 * 60_000 });
+  return { count, interval: duration / count, tileW, tileH };
+};
+
+/**
+ * Browser recordings (MediaRecorder WebM) carry no duration in their header; a stream
+ * copy into a fresh file writes it, so probing and seeking work. Returns false on failure.
+ */
+export const remuxInPlace = async (file: string): Promise<boolean> => {
+  const tmp = `${file}.remux${path.extname(file)}`;
+  const r = await runFf('ffmpeg', ['-y', '-i', file, '-c', 'copy', tmp], { timeoutMs: 10 * 60_000 });
+  if (r.code !== 0) {
+    await fsp.rm(tmp, { force: true });
+    return false;
+  }
+  await fsp.rename(tmp, file);
+  return true;
+};
+
+export type EnhanceStrength = 'light' | 'medium' | 'strong';
+
+/** Voice clean-up: rumble cut, broadband denoise, gentle compression and loudness. */
+export const enhanceSpeechFilter = (strength: EnhanceStrength): string => {
+  const nr = strength === 'light' ? 6 : strength === 'strong' ? 20 : 12;
+  const ratio = strength === 'light' ? 2 : strength === 'strong' ? 4 : 3;
+  return [
+    'highpass=f=80',
+    'lowpass=f=15000',
+    `afftdn=nr=${nr}:nf=-30:tn=1`,
+    `acompressor=threshold=0.1:ratio=${ratio}:attack=8:release=150:makeup=1.5`,
+    'loudnorm=I=-16:TP=-1.5:LRA=11',
+  ].join(',');
+};
+
+/** Write a speech-enhanced copy: video streams are copied untouched, the audio is processed. */
+export const enhanceSpeech = async (input: string, output: string, hasVideo: boolean, strength: EnhanceStrength = 'medium'): Promise<void> => {
+  const audio = ['-af', enhanceSpeechFilter(strength), '-c:a', 'aac', '-b:a', '192k', '-ar', '48000'];
+  const args = hasVideo ? ['-y', '-i', input, '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy', ...audio, output] : ['-y', '-i', input, '-vn', ...audio, output];
+  await must('ffmpeg', args, { timeoutMs: 30 * 60_000 });
+};
+
 /** Grab frames at the given times as JPEG buffers (for vision models). */
 export const extractFrames = async (input: string, times: number[], width = 768): Promise<{ time: number; jpeg: Buffer }[]> => {
   const out: { time: number; jpeg: Buffer }[] = [];
@@ -279,6 +330,21 @@ export const normalizeLoudness = async (input: string, output: string, target = 
       ? `loudnorm=I=${target}:TP=-1:LRA=11:measured_I=${m.i}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true`
       : `loudnorm=I=${target}:TP=-1:LRA=11`;
   await must('ffmpeg', ['-y', '-i', input, '-c:v', 'copy', '-af', filter, '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', output], { signal, timeoutMs: 60 * 60_000 });
+};
+
+/** Final audio-only export: optional loudness normalization, MP3 320k (AAC/M4A if the build lacks LAME). Returns the file written. */
+export const exportAudio = async (input: string, outputBase: string, target: number | null): Promise<string> => {
+  let filter: string[] = [];
+  if (target !== null) {
+    const m = await measureLoudness(input).catch(() => null);
+    filter = ['-af', m && Number.isFinite(m.i) && m.i > -70 ? `loudnorm=I=${target}:TP=-1:LRA=11:measured_I=${m.i}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true` : `loudnorm=I=${target}:TP=-1:LRA=11`];
+  }
+  const mp3 = `${outputBase}.mp3`;
+  const r = await runFf('ffmpeg', ['-y', '-i', input, '-vn', ...filter, '-ar', '48000', '-c:a', 'libmp3lame', '-b:a', '320k', mp3], { timeoutMs: 60 * 60_000 });
+  if (r.code === 0) return mp3;
+  const m4a = `${outputBase}.m4a`;
+  await must('ffmpeg', ['-y', '-i', input, '-vn', ...filter, '-ar', '48000', '-c:a', 'aac', '-b:a', '256k', m4a], { timeoutMs: 60 * 60_000 });
+  return m4a;
 };
 
 export const extractAudioWav = async (input: string, output: string, sampleRate = 16000): Promise<void> => {

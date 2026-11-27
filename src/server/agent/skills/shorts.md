@@ -12,3 +12,6 @@ description: YouTube Shorts / vertical video specifics — format, safe zones, h
 - **Reframing landscape footage**: put the 16:9 clip on Main with `fit: cover` (center crop). Use zooms with a focus point on the subject; or show it smaller with `box` + `blurredBackdrop`-style background.
 - **Loop**: end on a line/visual that flows back into the first second.
 - **Repurposing long-form**: find the most self-contained 20–60s moment in the transcript (a strong claim + payoff), cut it with `auto_cut` using `removeRanges` to keep only that span, then add captions, zooms and a hook text in the first 2s.
+
+## Repurposing a long video
+To make Shorts from an existing long video, don't rebuild by hand: read the transcript (`get_transcript`), pick 1–3 self-contained moments (20–60s, starting on a hook line, ending on a payoff) and call `create_short` with their timeline ranges and a punchy title. It creates a separate 9:16 project with reframed footage (set `focusX` to where the speaker is), synced graphics, captions and #shorts metadata. Tell the user the new project's name.

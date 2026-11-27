@@ -87,12 +87,13 @@ select option {
   background: rgb(255 90 31 / 0.4);
 }
 
-:focus-visible {
-  outline: 2px solid rgb(255 90 31 / 0.7);
-  outline-offset: 1px;
-}
-
 @layer base {
+  /* in the base layer so utilities like focus-visible:outline-none can opt out */
+  :focus-visible {
+    outline: 2px solid rgb(255 90 31 / 0.7);
+    outline-offset: 1px;
+  }
+
   input,
   textarea,
   select,

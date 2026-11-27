@@ -5,8 +5,10 @@ import type { Word } from '../../../shared/schema';
 import { formatTime, summarizeAsset } from '../../../shared/timeline';
 import { applyOp } from '../../../shared/ops';
 import { store } from '../../storage/projects';
-import { queueTranscription } from '../../media/ingest';
-import { detectScenes, detectSilence, extractFrames, measureLoudness, resizeImage } from '../../media/ffmpeg';
+import { queueTranscription, registerAsset } from '../../media/ingest';
+import { detectScenes, detectSilence, enhanceSpeech, extractFrames, measureLoudness, resizeImage } from '../../media/ffmpeg';
+import { CACHE_DIR } from '../../config';
+import { uid } from '../../../shared/ids';
 import { defineTool, j } from '../types';
 import { getProject, mutate } from './helpers';
 
@@ -275,5 +277,54 @@ export const annotateAsset = defineTool({
   execute: async (input, ctx) => {
     await mutate(ctx, 'Annotate asset', (d) => void applyOp(d, { op: 'updateAsset', assetId: input.assetId, patch: { description: input.description, tags: input.tags, name: input.name } }));
     return { text: 'Saved.', summary: 'saved' };
+  },
+});
+
+export const enhanceAudio = defineTool({
+  name: 'enhance_audio',
+  category: 'media',
+  description:
+    'Clean up speech in a video or audio asset: cuts rumble, removes steady background noise (hiss, hum, fans), evens out levels and normalizes loudness. Writes an enhanced copy (video is not re-encoded) and switches the timeline clips that use the asset to it, as one undoable step. Use on talking-head footage or voice recordings that sound noisy or uneven; strength "light" for clean rooms, "strong" for noisy ones.',
+  schema: z.object({
+    assetId: z.string(),
+    strength: z.enum(['light', 'medium', 'strong']).default('medium'),
+    replaceClips: z.boolean().default(true).describe('Point the clips that use the original at the enhanced copy'),
+  }),
+  execute: async (input, ctx) => {
+    const p = await getProject(ctx);
+    const a = p.assets.find((x) => x.id === input.assetId);
+    if (!a) return { text: `Asset ${input.assetId} not found`, isError: true };
+    if ((a.kind !== 'video' && a.kind !== 'audio') || a.meta.hasAudio === false) return { text: `${a.name} has no audio to enhance`, isError: true };
+    const hasVideo = a.kind === 'video';
+    const ext = hasVideo ? '.mp4' : '.m4a';
+    const tmpDir = path.join(CACHE_DIR, 'tmp');
+    await fsp.mkdir(tmpDir, { recursive: true });
+    const tmp = path.join(tmpDir, `${uid('enh')}${ext}`);
+    ctx.progress(`Cleaning up the audio of ${a.name}…`);
+    await enhanceSpeech(store.mediaPath(ctx.projectId, a.file), tmp, hasVideo, input.strength);
+    const words = (await store.readTranscript(ctx.projectId, a.id)) ?? undefined;
+    const asset = await registerAsset(ctx.projectId, {
+      sourcePath: tmp,
+      originalName: `${a.name.replace(/\.[^.]+$/, '').replace(/ \(enhanced\)$/, '')} (enhanced)${ext}`,
+      origin: a.origin,
+      description: a.description,
+      tags: [...new Set([...a.tags, 'enhanced'])],
+      words: words?.length ? words : undefined,
+      wait: true,
+      label: `Enhanced ${a.name}`,
+      updateSource: ctx.source,
+    });
+    let swapped = 0;
+    if (input.replaceClips) {
+      await mutate(ctx, `Enhance speech in ${a.name}`, (d) => {
+        for (const t of d.tracks)
+          for (const c of t.clips)
+            if ((c.type === 'video' || c.type === 'audio') && c.assetId === a.id) {
+              c.assetId = asset.id;
+              swapped++;
+            }
+      });
+    }
+    return { text: `Enhanced the audio of ${a.name} (${input.strength}) → new asset ${asset.id}. ${swapped} clip(s) now use it; the original is kept.`, summary: `${swapped} clip${swapped === 1 ? '' : 's'} switched` };
   },
 });

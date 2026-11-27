@@ -6,6 +6,8 @@ import { ArrowUp, Bot, ChevronDown, Circle, CircleCheck, CircleDot, CircleSlash,
 import type { ChatMessage, PlanItem } from '../../../shared/agent-types';
 import { api } from '../../lib/api';
 import { editorContext, useStudio } from '../../lib/store';
+import { prefs } from '../../lib/prefs';
+import { AI_ACTIONS, askDirector } from '../../lib/commands';
 import { cn, errorText, formatClock } from '../../lib/utils';
 import { Menu, Spinner } from '../ui';
 import { ToolGroup, type ToolMsg } from './ToolCard';
@@ -217,6 +219,30 @@ const StatusLine: React.FC = () => {
   );
 };
 
+/** A few next steps that fit the project's state, one click away. */
+const Suggestions: React.FC = () => {
+  const project = useStudio((s) => s.project!);
+  const hasMessages = useStudio((s) => s.chat.messages.length > 0);
+  if (!hasMessages || !project.tracks.some((t) => t.clips.length)) return null;
+  const clips = project.tracks.flatMap((t) => t.clips);
+  const ids: string[] = [];
+  if (!clips.some((c) => c.type === 'captions')) ids.push('captions');
+  if (!clips.some((c) => c.type === 'audio' && c.role === 'music')) ids.push('music');
+  if (!project.youtube.thumbnail.file) ids.push('thumbnail');
+  if (!project.youtube.title) ids.push('metadata');
+  ids.push('review');
+  const picks = ids.slice(0, 3).map((id) => AI_ACTIONS.find((a) => a.id === id)!);
+  return (
+    <div className="mb-2 flex flex-wrap gap-1">
+      {picks.map((a) => (
+        <button key={a.id} onClick={() => askDirector(a.prompt)} className="flex items-center gap-1 rounded-full border border-line bg-panel-2 px-2 py-0.5 text-[11px] text-muted transition-colors hover:border-accent-2/50 hover:text-text">
+          <a.icon className="size-3 text-accent-2-ink" /> {a.title}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 const Composer: React.FC = () => {
   const projectId = useStudio((s) => s.projectId)!;
   const project = useStudio((s) => s.project!);
@@ -225,11 +251,30 @@ const Composer: React.FC = () => {
   const prefill = useStudio((s) => s.composerPrefill);
   const focusTick = useStudio((s) => s.composerFocusTick);
   const selection = useStudio((s) => s.selection.length);
-  const [text, setText] = useState('');
+  const hasRange = useStudio((s) => Boolean(s.range));
+  const [text, setText] = useState(() => prefs.get<string>(`draft:${projectId}`, ''));
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // keep an unsent draft per project (written right away: a reload must not lose it)
+  useEffect(() => prefs.set(`draft:${projectId}`, text), [text, projectId]);
+
+  // "/" at the start opens the menu of ready-made briefs
+  const slash = text.startsWith('/') && !text.includes('\n') ? text.slice(1).toLowerCase() : null;
+  const slashItems = slash === null ? [] : AI_ACTIONS.filter((a) => !slash || `${a.id} ${a.title} ${a.hint}`.toLowerCase().includes(slash));
+  const pickSlash = (i: number) => {
+    const a = slashItems[i];
+    if (!a) return;
+    setText(a.prompt);
+    setSlashIndex(0);
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(a.prompt.length, a.prompt.length);
+    });
+  };
 
   useLayoutEffect(() => {
     const el = ta.current;
@@ -269,6 +314,8 @@ const Composer: React.FC = () => {
     const t = text.trim();
     if (!t || sending) return;
     setSending(true);
+    // ask once (on a click, so the browser allows it) to notify when the Director needs you in the background
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
     try {
       await api.sendChat(projectId, t, attachments, editorContext());
       setText('');
@@ -281,7 +328,32 @@ const Composer: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-line bg-black/15 p-2.5">
+    <div className="relative border-t border-line bg-black/15 p-2.5">
+      {slashItems.length > 0 && (
+        <div className="glass-pop absolute inset-x-2.5 bottom-full z-20 mb-1 max-h-72 overflow-y-auto rounded-xl p-1">
+          <div className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-dim">Quick briefs for the Director</div>
+          {slashItems.map((a, i) => (
+            <button
+              key={a.id}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickSlash(i);
+              }}
+              onMouseMove={() => setSlashIndex(i)}
+              className={cn('flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px]', i === slashIndex ? 'bg-white/[0.09] text-text' : 'text-muted')}
+            >
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-2/15 text-accent-2-ink">
+                <a.icon className="size-3.5" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-mono text-[11px] text-dim">/{a.id}</span> {a.title}
+              </span>
+              <span className="shrink-0 text-[10px] text-dim">{a.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {!busy && !text && <Suggestions />}
       <div
         className="rounded-xl border border-line-2 bg-black/25 transition-shadow focus-within:border-accent/70 focus-within:shadow-[0_0_0_3px_rgb(255_90_31/0.14),0_10px_30px_-12px_rgb(255_90_31/0.4)]"
         onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
@@ -310,6 +382,22 @@ const Composer: React.FC = () => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if (slashItems.length > 0) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSlashIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : -1) + slashItems.length) % slashItems.length);
+                return;
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                pickSlash(slashIndex);
+                return;
+              }
+              if (e.key === 'Escape') {
+                setText('');
+                return;
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();
@@ -322,7 +410,7 @@ const Composer: React.FC = () => {
               void upload(files);
             }
           }}
-          placeholder={busy ? 'Message the Director — it reads it between steps…' : 'Describe what you want…'}
+          placeholder={busy ? 'Message the Director — it reads it between steps…' : 'Describe what you want…  ( / for quick briefs )'}
           className="block max-h-[220px] w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-relaxed outline-none placeholder:text-dim"
         />
         <div className="flex items-center gap-1 px-1.5 pb-1.5">
@@ -331,7 +419,7 @@ const Composer: React.FC = () => {
           </button>
           <input ref={fileInput} type="file" hidden multiple onChange={(e) => (void upload([...(e.target.files ?? [])]), (e.target.value = ''))} />
           <span className="min-w-0 flex-1 truncate text-[10px] text-dim" title="Sent to the Director with your message">
-            {project.tracks.some((t) => t.clips.length) ? `Sees: playhead${selection ? ` · ${selection} selected clip${selection > 1 ? 's' : ''}` : ''}` : ''}
+            {project.tracks.some((t) => t.clips.length) ? `Sees: playhead${hasRange ? ' · in/out range' : ''}${selection ? ` · ${selection} selected clip${selection > 1 ? 's' : ''}` : ''}` : ''}
           </span>
           {busy && (
             <button className="btn btn-sm" onClick={() => void api.stop(projectId)} title="Stop the Director">

@@ -1,7 +1,8 @@
 import fsp from 'node:fs/promises';
 import { z } from 'zod';
+import { createShort } from '../../shorts';
 import { applyOp } from '../../../shared/ops';
-import { formatTime } from '../../../shared/timeline';
+import { formatTime, projectDuration } from '../../../shared/timeline';
 import { bus } from '../../events';
 import { RENDER_PRESETS, cancelRender, getServerOrigin, renderThumbnail, startRender, waitForRender, type RenderPreset } from '../../render/render';
 import { defineTool } from '../types';
@@ -96,5 +97,25 @@ export const renderVideo = defineTool({
       unsubscribe();
       ctx.signal.removeEventListener('abort', onAbort);
     }
+  },
+});
+
+export const createShortTool = defineTool({
+  name: 'create_short',
+  category: 'publish',
+  description:
+    'Repurpose part of this video as a YouTube Short: cuts the given timeline ranges (seconds; several ranges are joined in order) into a NEW 9:16 project. Graphics, voice and captions stay in sync, full-frame footage is reframed around focusX (0-1, where the subject is), music is trimmed, auto captions and #shorts metadata are added. The current project is not changed. Choose self-contained, hooky moments (20–60s) that start on a strong line; use get_transcript to find them. Returns the new project id.',
+  schema: z.object({
+    ranges: z.array(z.tuple([z.number().min(0), z.number().min(0)])).min(1).max(20),
+    title: z.string().max(100).optional(),
+    focusX: z.number().min(0).max(1).optional(),
+  }),
+  execute: async (input, ctx) => {
+    const short = await createShort(ctx.projectId, input.ranges, { title: input.title, focusX: input.focusX });
+    const dur = projectDuration(short);
+    return {
+      text: `Created the Short "${short.name}" (${dur.toFixed(1)}s, 9:16, captioned) as a separate project ${short.id}. Tell the user they can open it from the project list or at /?project=${short.id}. You are still editing the original project.`,
+      summary: `${short.name} · ${dur.toFixed(0)}s`,
+    };
   },
 });

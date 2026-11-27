@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Collapsible, Dialog, DropdownMenu, Slider, Switch as RSwitch, Tooltip } from 'radix-ui';
-import { ChevronDown, LoaderCircle, X } from 'lucide-react';
+import { Collapsible, Dialog, DropdownMenu, Popover, Slider, Switch as RSwitch, Tooltip } from 'radix-ui';
+import { ChevronDown, LoaderCircle, Palette, X } from 'lucide-react';
+import { useStudio } from '../lib/store';
 import { cn, clamp } from '../lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,8 @@ export const TextArea: React.FC<{
   rows?: number;
   mono?: boolean;
   commit?: 'change' | 'blur';
-}> = ({ value, onChange, placeholder, className, rows = 3, mono, commit = 'change' }) => {
+  id?: string;
+}> = ({ value, onChange, placeholder, className, rows = 3, mono, commit = 'change', id }) => {
   const [draft, setDraft] = useState(value);
   const focused = useRef(false);
   useEffect(() => {
@@ -240,6 +242,7 @@ export const TextArea: React.FC<{
   }, [value]);
   return (
     <textarea
+      id={id}
       value={draft}
       rows={rows}
       placeholder={placeholder}
@@ -406,6 +409,24 @@ const toHex = (c: string): string => {
   return '#000000';
 };
 
+/** Brand colors of the open project (for one-click swatches in color fields). */
+const useBrandSwatches = (): { label: string; color: string }[] => {
+  const brand = useStudio((s) => s.project?.brand);
+  if (!brand) return [];
+  return [
+    { label: 'Primary', color: brand.primary },
+    { label: 'Secondary', color: brand.secondary },
+    { label: 'Accent', color: brand.accent },
+    { label: 'Text', color: brand.text },
+    { label: 'Muted', color: brand.mutedText },
+    { label: 'Background', color: brand.background },
+    { label: 'Surface', color: brand.surface },
+    { label: 'White', color: '#FFFFFF' },
+    { label: 'Black', color: '#000000' },
+    { label: 'Dim', color: 'rgba(0,0,0,0.6)' },
+  ];
+};
+
 export const ColorField: React.FC<{ value: string | undefined; onChange: (v: string) => void; placeholder?: string; className?: string; allowClear?: boolean; onClear?: () => void }> = ({
   value,
   onChange,
@@ -413,20 +434,47 @@ export const ColorField: React.FC<{ value: string | undefined; onChange: (v: str
   className,
   allowClear,
   onClear,
-}) => (
-  <div className={cn('flex items-center gap-1.5', className)}>
-    <label className="checker relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-md border border-line">
-      <span className="absolute inset-0" style={{ background: value || 'transparent' }} />
-      <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={toHex(value ?? '#000000')} onChange={(e) => onChange(e.target.value.toUpperCase())} />
-    </label>
-    <TextInput value={value ?? ''} onChange={(v) => v.trim() && onChange(v.trim())} commit="blur" placeholder={placeholder} mono className="py-1" />
-    {allowClear && value && (
-      <button className="btn btn-ghost btn-icon text-dim" onClick={onClear} aria-label="Clear color">
-        <X className="size-3.5" />
-      </button>
-    )}
-  </div>
-);
+}) => {
+  const swatches = useBrandSwatches();
+  return (
+    <div className={cn('flex items-center gap-1.5', className)}>
+      <label className="checker relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-md border border-line">
+        <span className="absolute inset-0" style={{ background: value || 'transparent' }} />
+        <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={toHex(value ?? '#000000')} onChange={(e) => onChange(e.target.value.toUpperCase())} />
+      </label>
+      <TextInput value={value ?? ''} onChange={(v) => v.trim() && onChange(v.trim())} commit="blur" placeholder={placeholder} mono className="py-1" />
+      {swatches.length > 0 && (
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button className="btn btn-ghost btn-icon shrink-0 text-dim hover:text-text" aria-label="Brand colors" title="Brand colors">
+              <Palette className="size-3.5" />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content align="end" sideOffset={4} className="glass-pop z-[95] grid w-52 grid-cols-5 gap-1.5 rounded-xl p-2">
+              {swatches.map((sw) => (
+                <Popover.Close asChild key={sw.label}>
+                  <button
+                    title={`${sw.label} ${sw.color}`}
+                    onClick={() => onChange(sw.color)}
+                    className={cn('checker relative size-8 overflow-hidden rounded-md border border-line-2 transition-transform hover:scale-110', value?.toLowerCase() === sw.color.toLowerCase() && 'ring-2 ring-accent')}
+                  >
+                    <span className="absolute inset-0" style={{ background: sw.color }} />
+                  </button>
+                </Popover.Close>
+              ))}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      )}
+      {allowClear && value && (
+        <button className="btn btn-ghost btn-icon text-dim" onClick={onClear} aria-label="Clear color">
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const Segmented = <T extends string>({
   value,

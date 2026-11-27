@@ -18,7 +18,7 @@ import { uid } from '../../shared/ids';
 import { APP_ROOT, CACHE_DIR, getSettings } from '../config';
 import { bus } from '../events';
 import { store } from '../storage/projects';
-import { normalizeLoudness, probe } from '../media/ffmpeg';
+import { exportAudio, normalizeLoudness, probe } from '../media/ffmpeg';
 import { wordsToSrt } from '../services/documents';
 import { resolveBrowserExecutable } from './browser';
 
@@ -177,6 +177,8 @@ export interface RenderOptions {
   /** Render only part of the timeline (seconds) */
   range?: [number, number];
   normalize?: boolean;
+  /** Export the soundtrack only (MP3) */
+  audioOnly?: boolean;
 }
 
 export const startRender = async (projectId: string, opts: RenderOptions = {}): Promise<RenderRecord> => {
@@ -184,7 +186,7 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
   const duration = projectDuration(project);
   if (duration <= 0) throw new Error('The timeline is empty — add clips before rendering.');
   const preset = opts.preset ?? getSettings().render.quality;
-  const record = RenderRecordSchema.parse({ id: uid('render'), kind: 'video', createdAt: new Date().toISOString(), status: 'queued', progress: 0, preset });
+  const record = RenderRecordSchema.parse({ id: uid('render'), kind: opts.audioOnly ? 'audio' : 'video', createdAt: new Date().toISOString(), status: 'queued', progress: 0, preset: opts.audioOnly ? 'audio' : preset });
   await saveRecord(projectId, record);
   const { cancelSignal, cancel } = makeCancelSignal();
   let cancelled = false;
@@ -216,25 +218,22 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
       const frameRange: [number, number] | null = opts.range
         ? [Math.max(0, Math.round(opts.range[0] * fps)), Math.min(composition.durationInFrames - 1, Math.round(opts.range[1] * fps) - 1)]
         : null;
-      const raw = store.renderPath(projectId, `${record.id}.raw.mp4`);
+      const audioOnly = Boolean(opts.audioOnly);
+      const raw = store.renderPath(projectId, `${record.id}.raw.${audioOnly ? 'wav' : 'mp4'}`);
       const final = store.renderPath(projectId, `${record.id}.mp4`);
       await fsp.mkdir(path.dirname(raw), { recursive: true });
-      await update({ status: 'rendering', progress: 0, width: Math.round(composition.width * p.scale), height: Math.round(composition.height * p.scale) });
+      await update(audioOnly ? { status: 'rendering', progress: 0 } : { status: 'rendering', progress: 0, width: Math.round(composition.width * p.scale), height: Math.round(composition.height * p.scale) });
       let lastEmit = 0;
+      const encoding = audioOnly
+        ? ({ codec: 'wav' } as const)
+        : ({ codec: 'h264', crf: p.crf, x264Preset: p.x264Preset, jpegQuality: p.jpegQuality, scale: p.scale, pixelFormat: 'yuv420p', audioCodec: 'aac', audioBitrate: '320k' } as const);
       await renderMedia({
         composition,
         serveUrl,
-        codec: 'h264',
+        ...encoding,
         outputLocation: raw,
         inputProps,
         browserExecutable,
-        crf: p.crf,
-        x264Preset: p.x264Preset,
-        jpegQuality: p.jpegQuality,
-        scale: p.scale,
-        pixelFormat: 'yuv420p',
-        audioCodec: 'aac',
-        audioBitrate: '320k',
         frameRange,
         concurrency: getSettings().render.concurrency ?? null,
         cancelSignal,
@@ -254,6 +253,15 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
       });
       await update({ status: 'finishing', progress: 0.96 });
       const normalize = opts.normalize ?? fresh.audio.normalize;
+      if (audioOnly) {
+        const out = await exportAudio(raw, store.renderPath(projectId, record.id), normalize ? fresh.audio.loudnessTarget : null);
+        await fsp.rm(raw, { force: true });
+        const info = await probe(out).catch(() => null);
+        const stat = await fsp.stat(out);
+        await update({ status: 'done', progress: 1, file: path.basename(out), sizeBytes: stat.size, durationSec: info?.duration ?? duration, elapsedSec: Math.round((Date.now() - started) / 100) / 10 });
+        bus.toast(projectId, 'success', `Audio export finished (${(stat.size / 1e6).toFixed(1)} MB)`);
+        return;
+      }
       if (normalize) {
         try {
           await normalizeLoudness(raw, final, fresh.audio.loudnessTarget);
@@ -281,7 +289,7 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
       if (!isCancel) bus.toast(projectId, 'error', `Render failed: ${msg.slice(0, 160)}`);
     } finally {
       active.delete(record.id);
-      await fsp.rm(store.renderPath(projectId, `${record.id}.raw.mp4`), { force: true }).catch(() => undefined);
+      for (const ext of ['mp4', 'wav']) await fsp.rm(store.renderPath(projectId, `${record.id}.raw.${ext}`), { force: true }).catch(() => undefined);
     }
   };
   queue = queue.then(run, run);

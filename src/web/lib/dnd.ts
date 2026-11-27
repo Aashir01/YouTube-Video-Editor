@@ -97,7 +97,7 @@ const settleStart = (track: Track, start: number, duration: number): number => {
   return s;
 };
 
-const waitForAsset = (assetId: string, timeoutMs = 120_000): Promise<Asset | null> =>
+export const waitForAsset = (assetId: string, timeoutMs = 120_000): Promise<Asset | null> =>
   new Promise((resolve) => {
     const check = () => {
       const a = useStudio.getState().project?.assets.find((x) => x.id === assetId);
