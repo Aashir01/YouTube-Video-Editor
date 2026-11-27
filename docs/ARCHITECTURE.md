@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 43 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 45 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -32,15 +32,15 @@ Main parts:
 | Field | Purpose |
 |---|---|
 | `tracks[]` | Ordered tracks (`video`, `overlay`, `audio`, `captions`) with clips; later tracks paint on top |
-| clips | `video`, `image`, `audio`, `text`, `scene` (template + props), `code` (custom TSX), `captions` (auto or manual words) |
-| `assets[]` | Media and documents with probe metadata, thumbnail, waveform peaks, transcript status, analysis (silences, scenes, loudness), source/license |
+| clips | `video`, `image`, `audio`, `text`, `scene` (template + props), `code` (custom TSX), `captions` (auto or manual words), `blur` (a blurred box or ellipse over the picture) |
+| `assets[]` | Media and documents with probe metadata, thumbnail, waveform peaks, transcript status, analysis (silences, scenes, loudness), editing proxy, source/license |
 | `brief`, `brand` | What the video is (topic, audience, tone, format, length) and how it looks (colors, fonts, logo, watermark) |
 | `script` | Sections with exact narration and visual plan; linked to voiceover assets |
 | `youtube` | Title + options, description, tags, chapters, category, privacy, thumbnail design |
 | `markers[]` | Labelled review markers on the ruler (time, label, color), set by the user (`M`) or the Director |
 | `renders[]`, `audio` | Export records (video or audio-only, whole or a range); mix settings (duck level, loudness target) |
 
-Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX.
+Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX. A Blur track is added between B-roll and Graphics the first time a blur box is used; blur boxes may overlap each other, so several faces can be hidden at once.
 
 **Auto captions** don't store words. They are derived live from the transcripts of the clips on the timeline (`timelineWords` maps source-relative words through trims and speed), so they stay in sync after any cut. **Ducking** uses the same speech intervals to lower music under narration.
 
@@ -65,6 +65,7 @@ Because every change goes through the same ops, an edit made by the user, the Di
 - Captions come in 8 presets with word-level highlight and pagination.
 - `code/runtime.tsx` handles **code scenes**. TSX written by the agent is compiled with Sucrase in the browser and renderer (never executed on the server) against a fixed module map (`react`, `remotion`, `@remotion/shapes|paths|noise|layout-utils`, and a `director` kit of helpers). A static check (`src/shared/code-check.ts`) rejects non-determinism and network access before a scene is saved, and an error boundary reports runtime errors back to the agent.
 - `Thumbnail.tsx` provides 6 thumbnail layouts (or custom code), rendered as a still.
+- **Blur clips** (`BlurView` in `clips.tsx`) blur whatever is painted below them with CSS `backdrop-filter`. An ellipse is a radial mask with a soft edge. The headless render browser draws them exactly as the preview does.
 - Fonts (12 families) are bundled locally, so preview and render are identical and work offline.
 
 The same composition runs in the editor (Remotion Player), the agent's QA frames (`renderStill`) and the final render.
@@ -75,7 +76,8 @@ The same composition runs in the editor (Remotion Player), the agent's QA frames
 - **Channels:** it defines the animatable channels per clip type.
   - video/image: `box.x/y/w/h`, `focus.x/y`, `scale`, `opacity`, `rotation`, plus `volume` on video;
   - text: `x`, `y`, `style.size`, `opacity`, `rotation`;
-  - audio: `volume`.
+  - audio: `volume`;
+  - blur: `box.x/y/w/h`, `opacity`.
 - **Interpolation:** easing applies per segment (`linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`).
 - **Edit helpers:** set, remove, clear, move and re-ease keys, shared by the ops, the editor and the agent tools.
 
@@ -110,6 +112,14 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 - **Face detection** (`media/faces.ts`): the bundled YuNet model (`assets/models`, 232 KB, MIT) runs on `onnxruntime-node`, an optional dependency.
   - FFmpeg streams letterboxed BGR frames of the needed source range at 2 fps, and the stream is paused while inference catches up, so memory stays flat.
   - The model's outputs are decoded at strides 8/16/32, with non-maximum suppression. That costs about 30 ms per frame on a CPU.
+  - Its landmarks give each face a mouth box. `analyzeTalking` reads 10 frames a second, detects faces on every fifth and links them into per-person tracks. For each person it measures how much the mouth changes from frame to frame, minus how much the forehead changes, so nodding is not talking. Frames where the whole picture changes (a cut or a flash) are skipped.
+- **Object tracking** (`media/track.ts`): normalized cross-correlation template matching in plain JS, with no model.
+  - Frames are downscaled so the template is at most about 48 px, and integral images make each window's mean and variance O(1).
+  - The search runs coarse to fine around the last position. The template adapts slowly to changes in look. When the match score falls below 0.35 the region counts as lost, and its last good position is held.
+- **Proxies** (`shared/proxy.ts`, `makeProxy`): light editing copies of heavy footage.
+  - **When:** made automatically after analysis for codecs browsers can't play (anything but H.264, VP8, VP9 and AV1, e.g. HEVC or ProRes), for footage above 1080p, and for files over 20 minutes. The `render.proxies` setting picks `auto`, `always` or `off`, and the media card's menu creates or removes one by hand.
+  - **What:** 540 px on the short side, H.264 (`veryfast`, CRF 27) with a keyframe every half second for quick seeking, AAC audio and `faststart`. They run on their own one-at-a-time job queue with progress.
+  - **Use:** the preview's asset URLs point to the proxy (the **Playback quality** menu switches to the originals). Renders, frame reviews and analysis always read the original file.
 - **Speech enhancement** (`enhanceSpeech`): `highpass` → `lowpass` → `afftdn` → `acompressor` → `loudnorm`, in light / medium / strong strengths. The video stream is copied, not re-encoded, and the transcript carries over to the new asset, which then replaces the original's clips in one undo step.
 
 ## 6. The Director agent
@@ -117,7 +127,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 43 in total):
+- **Tools** (`tools/`, 45 in total):
 
   | Category | Tools |
   |---|---|
@@ -127,7 +137,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
   | Research | `web_search`, `fetch_url` |
   | Script | `write_script`, `list_voices` |
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
-  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe` |
+  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion` |
   | Motion | `list_templates`, `write_code_scene` |
   | Review | `check_timeline`, `preview_frames` |
   | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `create_short`, `upload_to_youtube` |
@@ -153,7 +163,21 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 3. **Path.** A median filter removes detector spikes. Jumps bigger than a quarter frame split the path into shots, aligned to the asset's scene cuts when known, with `hold` keys so the camera cuts with the footage.
 4. **Simplify.** Each shot is smoothed and simplified with Ramer–Douglas–Peucker within a tolerance measured in frame units. A steady subject becomes one static focus; otherwise you get a few linear `focus.x/y` keys.
 
-`src/server/reframe.ts` applies this to clips: the `auto_reframe` tool (Director, MCP, the Inspector's **Track faces**) and Make a Short, which reframes the new 9:16 project automatically.
+**Conversations** (`planSpeakerReframe`) frame whoever is talking instead of the biggest face:
+1. **When.** It needs at least two people who share the frame for at least 30% of the clip. People who never appear together are one person across shots, so the single-subject plan above is used.
+2. **Group shot.** If everyone fits in the crop together, they are framed as a group with no cuts.
+3. **Who talks.** Mouth activity is averaged per half second and measured above each person's resting level: their quietest 10%, capped near the quietest person's level, so someone who hardly stops talking still counts. A step counts only during speech (the asset's silence analysis) and only when one person clearly leads.
+4. **Shots.** A new speaker must lead for 1 s, and every shot lasts at least 2 s, so the camera doesn't flicker. Because the plan is made offline, each cut is moved back to when the new speaker started, snapped to the start of their sentence or a cut in the footage when one is within 0.6 s. Shots are `hold` keys: the crop cuts rather than pans.
+
+`src/server/reframe.ts` applies this to clips: the `auto_reframe` tool (Director, MCP, the Inspector's **Track faces**) and Make a Short, which reframes the new 9:16 project automatically. Each clip's summary says which plan was used (one subject, speakers or group).
+
+### Motion tracking and blur
+
+`src/shared/motion.ts` maps between the footage and the canvas. A point in the source goes through the clip's fit, zoom, focus, punch-in zooms, Ken Burns and keyframes (`mediaToCanvas`, `canvasToMedia`). The path is then simplified (Ramer–Douglas–Peucker) into keyframes (`pathKeyframes`).
+
+`src/server/motion.ts` uses it for two features:
+- **Follow** (`followTarget`, the `track_motion` tool, the Inspector's **Motion tracking**): a text, picture-in-picture or blur clip follows the nearest face (detector tracks) or whatever is under it (template matching). It keeps its offset from the target and gets smoothed `box.x/y` or `x/y` keys.
+- **Blur faces** (`blurFacesOps`, the `blur_faces` tool, the Inspector's **Privacy** section): one blur clip per person in the shot, sized a little larger than the face. Position and size are smoothed separately, so the box moves with the face without jitter. It all lands as one undo step.
 
 ### Shorts from a long video
 
@@ -166,7 +190,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 ## 7. MCP
 
-- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 40 non-chat Director tools plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
+- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 42 non-chat Director tools plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
 - **Client** (`src/server/mcp/client.ts`): servers configured in Settings (stdio or HTTP) are connected at startup and on change. Their tools are offered to the Director as `mcp__<server>__<tool>`.
 
 ## 8. The editor UI
@@ -182,6 +206,8 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 - **Timeline** (`editor/Timeline.tsx`, `TimelineClip.tsx`): a canvas ruler (ticks, chapters, markers, range), clips with filmstrips, waveforms, volume envelopes and fade handles, rubber-band selection and snapping.
 - **Transcript panel** (`panels/TranscriptPanel.tsx`): timeline words (`timelineWordsDetailed`) mapped back to clips. Cutting words turns them into ripple-deleted ranges, and filler and pause detection (`fillerRanges`, `pauseRanges`) live in `src/shared/timeline.ts`.
 - **Command palette** (`lib/commands.ts`, `editor/CommandPalette.tsx`): fuzzy search over commands, clips and times, plus one-line Director briefs.
+- **Tracking and blur** (`editor/Tracking.tsx`): the Motion tracking buttons (follow a face or what's under the clip), **Blur faces**, and the blur box editor (shape, strength, opacity). Blur boxes are moved and resized on the canvas like any box.
+- **Preview** (`editor/Preview.tsx`): plays proxies when they exist. The **Playback quality** menu switches to the originals.
 - **Recording** (`editor/RecordDialog.tsx`): `getUserMedia` / `getDisplayMedia` + `MediaRecorder`, uploaded as a normal asset and placed at the playhead.
 - `window.cutroom` exposes the store and player for automation and end-to-end tests.
 
@@ -209,7 +235,14 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - **Runtime:** runs as `node`, with `DIRECTOR_DATA_DIR=/data` on a volume and a health check on `/api/health`.
   - **Compose:** publishes on `127.0.0.1:3333` only and gives Chrome 1 GB of shared memory.
 
-## 11. Security notes
+## 11. Tests
+
+- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts, the reframe and motion planners, proxies, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic face tracks.
+- **End to end** (`npm run test:e2e`, `tests/e2e/`): Playwright drives a real Chromium against `director start` on a temporary data folder. A scripted OpenAI-compatible model stands in for the AI.
+  - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers" and 1440p and HEVC files.
+  - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames. Faces are re-detected on renders to check reframing and blur. Any browser console error fails a suite.
+
+## 12. Security notes
 
 - The server binds to `127.0.0.1` by default.
 - Settings are stored with file mode 600. API keys are masked (`••••abcd`) in every API response, and masked values sent back are merged with the stored secrets.
