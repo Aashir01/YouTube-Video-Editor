@@ -46,3 +46,5 @@ export class JobQueue {
 export const analysisQueue = new JobQueue(2);
 export const transcriptionQueue = new JobQueue(1);
 export const generationQueue = new JobQueue(3);
+/** proxies are heavy encodes: one at a time */
+export const proxyQueue = new JobQueue(1);

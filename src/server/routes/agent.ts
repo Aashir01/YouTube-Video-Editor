@@ -64,6 +64,8 @@ export const installAgentRoutes = (app: Hono): void => {
     analyze_media: 'Analyzing media',
     enhance_audio: 'Enhancing speech',
     auto_reframe: 'Tracking faces',
+    blur_faces: 'Blurring faces',
+    track_motion: 'Tracking motion',
   };
   app.post('/api/projects/:id/tools/:name', async (c) => {
     const id = c.req.param('id');

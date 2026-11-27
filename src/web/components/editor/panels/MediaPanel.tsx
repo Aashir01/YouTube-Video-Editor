@@ -8,6 +8,7 @@ import {
   Circle,
   CirclePlus,
   Ellipsis,
+  Feather,
   FileText,
   Film,
   Image as ImageIcon,
@@ -101,6 +102,11 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
           </span>
         )}
         {asset.origin === 'tts' && <Mic className="absolute left-1 top-1 size-3.5 text-ok" />}
+        {asset.proxy && (
+          <span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[9px] font-bold uppercase tracking-wide text-white" title={`Editing proxy ${asset.proxy.width}×${asset.proxy.height}: smooth playback; exports use the original`}>
+            proxy
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-1 px-1.5 py-1">
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium" title={asset.name}>
@@ -137,6 +143,17 @@ const AssetCard: React.FC<{ asset: Asset; selected: boolean; onSelect: () => voi
                         .catch((e) => toast.error(errorText(e), { id: t }));
                     },
                   },
+                ]
+              : []),
+            ...(asset.kind === 'video'
+              ? [
+                  asset.proxy
+                    ? { label: 'Remove proxy (play the original)', icon: <Feather />, onSelect: () => void api.removeProxy(projectId, asset.id).catch((e) => toast.error(errorText(e))) }
+                    : {
+                        label: 'Create proxy (smoother editing)',
+                        icon: <Feather />,
+                        onSelect: () => void api.createProxy(projectId, asset.id).then(() => toast('Making a light editing copy; exports still use the original')).catch((e) => toast.error(errorText(e))),
+                      },
                 ]
               : []),
             'separator' as const,

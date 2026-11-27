@@ -94,6 +94,8 @@ const RenderSettingsSchema = z.object({
   quality: z.enum(['draft', 'standard', 'high']).default('standard'),
   concurrency: z.number().int().min(1).max(32).optional(),
   browserExecutable: z.string().default(''),
+  /** light copies of heavy footage for smooth editing (renders always use the originals) */
+  proxies: z.enum(['auto', 'always', 'off']).default('auto'),
 });
 
 const AgentSettingsSchema = z.object({

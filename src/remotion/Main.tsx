@@ -4,7 +4,7 @@ import type { Clip, CompositionInput, Project, Track } from '../shared/schema';
 import { speechIntervals } from '../shared/timeline';
 import { animateClip } from '../shared/keyframes';
 import { StudioProvider, makeTheme, useStudio, useTheme } from './context';
-import { AudioView, CaptionsView, CodeView, ImageView, SceneView, TextView, VideoView, VisualFrame } from './clips';
+import { AudioView, BlurView, CaptionsView, CodeView, ImageView, SceneView, TextView, VideoView, VisualFrame } from './clips';
 import { useFontsReady } from './fonts';
 import { clipFrames } from './effects';
 
@@ -89,6 +89,12 @@ const ClipSequence: React.FC<{ clip: Clip; track: Track }> = ({ clip, track }) =
           <VisualFrame clip={clip}>
             <SceneView clip={clip} />
           </VisualFrame>
+        </Sequence>
+      );
+    case 'blur':
+      return (
+        <Sequence from={from} durationInFrames={durationInFrames} name={name}>
+          <Animated clip={clip}>{(c) => <BlurView clip={c} />}</Animated>
         </Sequence>
       );
     case 'code':

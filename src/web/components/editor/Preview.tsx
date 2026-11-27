@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
-import { Check, Clapperboard, Expand, Gauge, Grid3x3, Pause, Play, Repeat, SkipBack, SkipForward, StepBack, StepForward, Volume2, VolumeX, ZoomIn } from 'lucide-react';
+import { Check, Clapperboard, Expand, Feather, Gauge, Grid3x3, Pause, Play, Repeat, SkipBack, SkipForward, StepBack, StepForward, Volume2, VolumeX, ZoomIn } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import type { CompositionInput } from '../../../shared/schema';
 import { projectDuration } from '../../../shared/timeline';
@@ -113,6 +113,13 @@ export const Preview: React.FC = () => {
     setGuidesState(g);
   };
   const [zoomMode, setZoomMode] = useState<ZoomMode>('fit');
+  // light proxies of heavy footage play smoothly; renders always use the originals
+  const [useProxies, setUseProxiesState] = useState(() => prefs.get('useProxies', true));
+  const setUseProxies = (v: boolean) => {
+    prefs.set('useProxies', v);
+    setUseProxiesState(v);
+  };
+  const hasProxies = project.assets.some((a) => a.proxy);
   const playbackRate = useStudio((s) => s.playbackRate);
   const range = useStudio((s) => s.range);
   const loopRange = useStudio((s) => s.loopRange);
@@ -122,7 +129,7 @@ export const Preview: React.FC = () => {
   const durationInFrames = Math.max(1, Math.ceil(duration * fps));
   const portrait = height > width;
 
-  const assetUrls = useMemo(() => Object.fromEntries(project.assets.map((a) => [a.id, mediaUrl(project.id, a.file)])), [project.assets, project.id]);
+  const assetUrls = useMemo(() => Object.fromEntries(project.assets.map((a) => [a.id, mediaUrl(project.id, useProxies && a.proxy ? a.proxy.file : a.file)])), [project.assets, project.id, useProxies]);
   const inputProps = useMemo<CompositionInput>(() => ({ project, assetUrls, transcripts, mode: 'preview' }), [project, assetUrls, transcripts]);
 
   // fit the canvas inside the available area
@@ -289,6 +296,17 @@ export const Preview: React.FC = () => {
           active={zoomMode !== 'fit'}
           items={(['fit', 0.25, 0.5, 1] as ZoomMode[]).map((z) => ({ label: z === 'fit' ? 'Fit to panel' : `${z * 100}%${z === 1 ? ' (actual pixels)' : ''}`, checked: zoomMode === z, onSelect: () => setZoomMode(z) }))}
         />
+        {hasProxies && (
+          <PreviewMenu
+            label="Playback quality"
+            icon={<Feather className="size-4" />}
+            active={useProxies}
+            items={[
+              { label: 'Proxies: smooth editing', checked: useProxies, onSelect: () => setUseProxies(true) },
+              { label: 'Originals: full quality', checked: !useProxies, onSelect: () => setUseProxies(false) },
+            ]}
+          />
+        )}
         <PreviewMenu
           label="Guides"
           icon={<Grid3x3 className="size-4" />}

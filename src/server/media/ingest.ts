@@ -5,10 +5,11 @@ import { AssetSchema, type Asset, type AssetKind } from '../../shared/schema';
 import { uid } from '../../shared/ids';
 import { getSettings } from '../config';
 import { bus } from '../events';
-import { analysisQueue, transcriptionQueue } from '../jobs';
+import { analysisQueue, proxyQueue, transcriptionQueue } from '../jobs';
 import { store } from '../storage/projects';
 import { DOCUMENT_EXTENSIONS, extractDocumentText, parseSubtitles } from '../services/documents';
-import { filmstrip, probe, remuxInPlace, thumbnail, waveformPeaks } from './ffmpeg';
+import { filmstrip, makeProxy, probe, remuxInPlace, thumbnail, waveformPeaks } from './ffmpeg';
+import { needsProxy, proxySize } from '../../shared/proxy';
 
 const VIDEO_EXT = ['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.mts', '.m2ts', '.3gp', '.wmv', '.flv', '.mpg', '.mpeg'];
 const AUDIO_EXT = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac', '.aiff', '.aif', '.wma', '.weba'];
@@ -168,6 +169,10 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
       a.filmstrip = strip;
     });
     const settings = getSettings();
+    // heavy or browser-unfriendly footage gets a light editing copy in the background
+    if (info.hasVideo && !info.isImage && info.width && info.height && needsProxy({ codec: info.codec, width: info.width, height: info.height, duration: info.duration }, settings.render.proxies)) {
+      void ensureProxy(projectId, assetId).catch((err) => console.warn('[proxy]', (err as Error).message));
+    }
     const fresh = (await store.get(projectId)).assets.find((a) => a.id === assetId);
     if (
       fresh &&
@@ -205,6 +210,37 @@ export const ensureFilmstrip = (projectId: string, assetId: string): Promise<voi
     stripsInFlight.set(key, job);
   }
   return job;
+};
+
+const proxiesInFlight = new Map<string, Promise<void>>();
+
+/** Make the editing proxy of a video asset (no-op if it has one). Runs on the proxy queue with progress. */
+export const ensureProxy = (projectId: string, assetId: string): Promise<void> => {
+  const key = `${projectId}/${assetId}`;
+  let job = proxiesInFlight.get(key);
+  if (!job) {
+    job = (async () => {
+      const asset = (await store.get(projectId)).assets.find((a) => a.id === assetId);
+      if (!asset || asset.kind !== 'video' || asset.proxy || !asset.meta.width || !asset.meta.height) return;
+      const size = proxySize(asset.meta.width, asset.meta.height);
+      const file = `${assetId}.proxy.mp4`;
+      await proxyQueue.add(projectId, `Proxy for ${asset.name}`, (report) =>
+        makeProxy(store.mediaPath(projectId, asset.file), store.mediaPath(projectId, file), size, asset.meta.duration ?? 0, asset.meta.fps, (p) => report(p)),
+      );
+      await patchAsset(projectId, assetId, 'Proxy ready', (a) => void (a.proxy = { file, ...size }));
+    })().finally(() => proxiesInFlight.delete(key));
+    proxiesInFlight.set(key, job);
+  }
+  return job;
+};
+
+/** Drop an asset's proxy (the editor plays the original again). */
+export const removeProxy = async (projectId: string, assetId: string): Promise<void> => {
+  const asset = (await store.get(projectId)).assets.find((a) => a.id === assetId);
+  if (!asset?.proxy) return;
+  const file = asset.proxy.file;
+  await patchAsset(projectId, assetId, 'Proxy removed', (a) => void delete a.proxy);
+  await fsp.rm(store.mediaPath(projectId, file), { force: true });
 };
 
 /** Queue a transcription (no-op if no engine is available). Resolves with the word count. */

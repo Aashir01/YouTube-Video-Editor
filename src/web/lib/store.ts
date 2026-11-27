@@ -448,6 +448,8 @@ export const clipLabel = (clip: Clip, p?: Project | null): string => {
       return clip.description?.slice(0, 40) || 'Code scene';
     case 'captions':
       return clip.mode === 'auto' ? 'Auto captions' : 'Captions';
+    case 'blur':
+      return 'Blur';
   }
 };
 

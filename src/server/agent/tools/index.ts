@@ -11,6 +11,7 @@ import { previewFrames } from './review';
 import { createShortTool, designThumbnail, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
 import { autoReframe } from './reframe';
+import { blurFaces, trackMotion } from './tracking';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
 export const BUILTIN_TOOLS: AgentTool[] = [
@@ -33,6 +34,8 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   annotateAsset,
   enhanceAudio,
   autoReframe,
+  blurFaces,
+  trackMotion,
   webSearchTool,
   fetchUrl,
   writeScript,

@@ -7,7 +7,7 @@ export const autoReframe = defineTool({
   name: 'auto_reframe',
   category: 'edit',
   description:
-    'Smart reframe: detect faces in video/image clips and point each crop at the main speaker (a locked crop when they stay put, smooth keyframed moves when they move, hard cuts with the footage). Run it after switching a project to 9:16 or whenever footage is cropped or zoomed, so speakers stay in frame. Runs locally. Default: every full-frame video/image clip.',
+    'Smart reframe: detect faces in video/image clips and point each crop at the speaker (a locked crop when they stay put, smooth keyframed moves when they move, hard cuts with the footage). With two or more people in shot (podcasts, interviews) it cuts to whoever is talking, multicam-style, or frames them together when they fit. Run it after switching a project to 9:16 or whenever footage is cropped or zoomed. Runs locally. Default: every full-frame video/image clip.',
   schema: z.object({
     clipIds: z.array(z.string()).max(200).optional().describe('Clips to reframe (default: all full-frame video/image clips)'),
   }),
