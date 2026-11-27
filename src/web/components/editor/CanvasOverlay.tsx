@@ -173,7 +173,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
 
     // per-kind starting values
     const textStart = clip.type === 'text' ? { x: clip.x, y: clip.y, size: clip.style.size, offX: (r0.x + r0.w / 2) / W - clip.x, offY: (r0.y + r0.h / 2) / H - clip.y } : null;
-    const boxStart = (clip.type === 'video' || clip.type === 'image') && clip.box ? { ...clip.box } : null;
+    const boxStart = ((clip.type === 'video' || clip.type === 'image') && clip.box) || clip.type === 'blur' ? { ...clip.box! } : null;
     const focusStart = (clip.type === 'video' || clip.type === 'image') && !clip.box ? { x: clip.focus?.x ?? 0.5, y: clip.focus?.y ?? 0.5 } : null;
     const capStart = clip.type === 'captions' ? clip.style.offsetY : 0;
 
@@ -230,7 +230,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
         y += sy.offset;
         if (sx.guide) guides.push(sx.guide);
         if (sy.guide) guides.push(sy.guide);
-        patchClip(clip.id, { box: { ...boxStart, x: round4(x), y: round4(y) } }, 'Move picture-in-picture');
+        patchClip(clip.id, { box: { ...boxStart, x: round4(x), y: round4(y) } }, clip.type === 'blur' ? 'Move blur' : 'Move picture-in-picture');
         setDrag({ guides, readout: `X ${pct(x)} · Y ${pct(y)}` });
       } else if (handle && boxStart) {
         let { x, y, w, h } = boxStart;
@@ -277,7 +277,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
         }
         w = clamp(w, 0.03, 3);
         h = clamp(h, 0.03, 3);
-        patchClip(clip.id, { box: { x: round4(x), y: round4(y), w: round4(w), h: round4(h) } }, 'Resize picture-in-picture');
+        patchClip(clip.id, { box: { x: round4(x), y: round4(y), w: round4(w), h: round4(h) } }, clip.type === 'blur' ? 'Resize blur' : 'Resize picture-in-picture');
         setDrag({ guides, readout: `${pct(w)} × ${pct(h)}` });
       } else if (!handle && focusStart) {
         if (overflow.x < 1 && overflow.y < 1) {
@@ -354,7 +354,7 @@ export const CanvasOverlay: React.FC<{ canvasWidth: number; canvasHeight: number
     const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
     const c = atPlayhead(ref.clip);
     if (c.type === 'text') patchClip(c.id, { x: round4(clamp(c.x + dx, 0, 1)), y: round4(clamp(c.y + dy, 0, 1)) }, 'Nudge text');
-    else if ((c.type === 'video' || c.type === 'image') && c.box) patchClip(c.id, { box: { ...c.box, x: round4(c.box.x + dx), y: round4(c.box.y + dy) } }, 'Nudge picture-in-picture');
+    else if (((c.type === 'video' || c.type === 'image') && c.box) || c.type === 'blur') patchClip(c.id, { box: { ...c.box!, x: round4(c.box!.x + dx), y: round4(c.box!.y + dy) } }, c.type === 'blur' ? 'Nudge blur' : 'Nudge picture-in-picture');
     else if (c.type === 'video' || c.type === 'image') patchClip(c.id, { focus: { x: round4(clamp((c.focus?.x ?? 0.5) - dx * 2, 0, 1)), y: round4(clamp((c.focus?.y ?? 0.5) - dy * 2, 0, 1)) } }, 'Reframe');
     else if (c.type === 'captions') patchClip(c.id, { style: { offsetY: round4(clamp(c.style.offsetY + dy, -0.5, 0.5)) } }, 'Move captions');
   };

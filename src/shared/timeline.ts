@@ -193,6 +193,15 @@ export const defaultTrackFor = (p: Project, clip: Pick<Clip, 'type'> & { role?: 
     case 'code':
       t = byName('Graphics') ?? byKind('overlay');
       break;
+    case 'blur': {
+      // its own track above the footage and b-roll, below the graphics (titles stay sharp)
+      t = byName('Blur');
+      if (!t) {
+        const graphics = p.tracks.findIndex((x) => x.name === 'Graphics');
+        t = addTrack(p, { name: 'Blur', kind: 'overlay', index: graphics >= 0 ? graphics : p.tracks.length });
+      }
+      break;
+    }
     default:
       t = byName('Main') ?? byKind('video');
   }
@@ -224,6 +233,8 @@ export const addTrack = (p: Project, opts: { name: string; kind: TrackKind; inde
 
 /** Allowed overlap between two clips (crossfade) given their transitions. */
 const allowedOverlap = (a: Clip, b: Clip): number => {
+  // blur boxes can stack: each one hides a different face or plate
+  if (a.type === 'blur' && b.type === 'blur') return Infinity;
   const first = a.start <= b.start ? a : b;
   const second = first === a ? b : a;
   return Math.max(second.transitionIn?.duration ?? 0, first.transitionOut?.duration ?? 0);
@@ -818,6 +829,8 @@ const describeClipBase = (c: Clip, p: Project): string => {
       return `${c.id} code-scene${c.description ? ` "${c.description.slice(0, 40)}"` : ''} ${span}`;
     case 'captions':
       return `${c.id} captions(${c.mode}, ${c.style.preset}) ${span}`;
+    case 'blur':
+      return `${c.id} blur(${c.shape}) box ${c.box.x.toFixed(2)},${c.box.y.toFixed(2)} ${c.box.w.toFixed(2)}×${c.box.h.toFixed(2)} ${span}`;
   }
   void p;
 };

@@ -113,7 +113,7 @@ const detectFrame = async (d: { ort: OrtModule; session: OrtSession }, frame: Ui
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
 /** Frame size for the detector: the picture scaled to fit 640 px, even dimensions. */
-const frameSize = (size: { width: number; height: number }) => {
+export const frameSize = (size: { width: number; height: number }) => {
   const k = SIZE / Math.max(size.width, size.height);
   return { w: Math.max(2, Math.floor((size.width * k) / 2) * 2), h: Math.max(2, Math.floor((size.height * k) / 2) * 2) };
 };
@@ -122,7 +122,7 @@ const frameSize = (size: { width: number; height: number }) => {
  * Stream BGR frames of [from, to) seconds at `fps` (or the single frame of a still image when `to` is
  * undefined) and hand them to `onFrame` one at a time; FFmpeg is paused while `onFrame` catches up.
  */
-const readFrames = (file: string, w: number, h: number, from: number, to: number | undefined, fps: number, onFrame: (t: number, frame: Uint8Array) => Promise<void>, signal?: AbortSignal): Promise<void> => {
+export const readFrames = (file: string, w: number, h: number, from: number, to: number | undefined, fps: number, onFrame: (t: number, frame: Uint8Array) => Promise<void>, signal?: AbortSignal): Promise<void> => {
   const frameBytes = w * h * 3;
   const still = to === undefined;
   const input = still ? ['-i', file, '-frames:v', '1'] : ['-ss', Math.max(0, from).toFixed(3), '-t', Math.max(0.05, to - from).toFixed(3), '-i', file, '-an', '-sn'];
@@ -210,7 +210,7 @@ export const detectFaces = async (file: string, size: { width: number; height: n
 // Who is talking: faces tracked over time plus how much each mouth moves
 // ---------------------------------------------------------------------------
 
-const toGray = (frame: Uint8Array, w: number, h: number): Uint8Array => {
+export const toGray = (frame: Uint8Array, w: number, h: number): Uint8Array => {
   const g = new Uint8Array(w * h);
   for (let i = 0, j = 0; i < g.length; i++, j += 3) g[i] = (frame[j]! * 29 + frame[j + 1]! * 150 + frame[j + 2]! * 77) >> 8;
   return g;

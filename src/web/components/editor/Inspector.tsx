@@ -27,6 +27,7 @@ import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
 import { SchemaForm } from './SchemaForm';
 import { AnimationSection, useAnim } from './Keyframes';
+import { BlurEditor, BlurFacesButton, MotionTracking } from './Tracking';
 
 const FONT_OPTIONS = FONTS.map((f) => ({ value: f.id, label: f.family.replace(' Variable', '') }));
 const opts = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x.replace(/-/g, ' ') }));
@@ -321,6 +322,9 @@ const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch 
       </Section>
       <Placement clip={clip} patch={patch} />
       <Reframe clip={clip} patch={patch} />
+      <Section title="Privacy" defaultOpen={false}>
+        <BlurFacesButton clip={clip} />
+      </Section>
       <Motion clip={clip} patch={patch} />
       <Grade clip={clip} patch={patch} />
     </>
@@ -652,6 +656,8 @@ export const Inspector: React.FC = () => {
         {clip.type === 'scene' && <SceneEditor clip={clip} patch={patch} />}
         {clip.type === 'code' && <CodeEditor clip={clip} patch={patch} />}
         {clip.type === 'captions' && <CaptionsEditor clip={clip} patch={patch} />}
+        {clip.type === 'blur' && <BlurEditor clip={clip} patch={patch} />}
+        {(clip.type === 'text' || clip.type === 'blur' || ((clip.type === 'video' || clip.type === 'image') && clip.box)) && <MotionTracking clip={clip} />}
         <AnimationSection clip={clip} />
         {clip.type !== 'audio' && clip.type !== 'captions' && <Transitions clip={clip} patch={patch} />}
       </div>

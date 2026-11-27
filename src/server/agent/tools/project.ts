@@ -29,7 +29,7 @@ export const getTimeline = defineTool({
     from: z.number().optional(),
     to: z.number().optional(),
     trackIds: z.array(z.string()).optional(),
-    types: z.array(z.enum(['video', 'image', 'audio', 'text', 'scene', 'code', 'captions'])).optional(),
+    types: z.array(z.enum(['video', 'image', 'audio', 'text', 'scene', 'code', 'captions', 'blur'])).optional(),
   }),
   execute: async (input, ctx) => {
     const p = await getProject(ctx);

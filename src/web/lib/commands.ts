@@ -11,11 +11,12 @@ import {
   Brain,
   Camera,
   Captions,
-  ClipboardPaste,
   Clapperboard,
+  ClipboardPaste,
   Copy,
   Download,
   Eraser,
+  EyeOff,
   FileText,
   Film,
   Gauge,
@@ -157,6 +158,7 @@ export const buildCommands = (): Command[] => {
     { id: 'add-title', group: 'Add', title: 'Add a title', icon: Type, run: () => void addAtPlayhead({ kind: 'text', preset: 'title' }), keywords: 'text heading' },
     { id: 'add-lower', group: 'Add', title: 'Add a lower third', icon: Type, run: () => void addAtPlayhead({ kind: 'text', preset: 'lower' }), keywords: 'name text' },
     { id: 'add-textbox', group: 'Add', title: 'Add a text box', icon: Type, run: () => void addAtPlayhead({ kind: 'text', preset: 'caption-box' }) },
+    { id: 'add-blur', group: 'Add', title: 'Add a blur box', icon: EyeOff, run: () => void addAtPlayhead({ kind: 'blur' }), keywords: 'hide face plate privacy censor' },
     { id: 'add-captions', group: 'Add', title: 'Add auto captions', icon: Captions, run: () => void api.runTool(st().projectId!, 'add_captions', { style: { preset: 'bold-pop' } }).then(() => toast.success('Captions added')).catch((e) => toast.error(errorText(e))), keywords: 'subtitles' },
     { id: 'upload', group: 'Add', title: 'Upload media…', icon: Upload, run: () => {
       st().setLeftTab('media');

@@ -14,7 +14,8 @@ export type DragPayload =
   | { kind: 'template'; templateId: string }
   | { kind: 'sound'; soundId: string; soundKind: 'sfx' | 'music' }
   | { kind: 'text'; preset: 'title' | 'lower' | 'caption-box' }
-  | { kind: 'captions' };
+  | { kind: 'captions' }
+  | { kind: 'blur' };
 
 export const DND_TYPE = 'application/x-director';
 
@@ -80,6 +81,8 @@ export const clipForPayload = (p: Project, payload: DragPayload, start: number, 
     }
     case 'captions':
       return { id, type: 'captions', mode: 'auto', start: 0, duration: Math.max(1, ...p.tracks.flatMap((t) => t.clips.filter((c) => c.type !== 'captions').map(clipEnd))) };
+    case 'blur':
+      return { id, type: 'blur', start, duration: 4, box: { x: 0.4, y: 0.3, w: 0.2, h: 0.32 }, shape: 'ellipse', strength: 28 };
     case 'sound':
       return null; // needs an upload first, see dropPayload
   }
@@ -184,6 +187,12 @@ export const addAtPlayhead = async (payload: DragPayload): Promise<void> => {
   if (payload.kind === 'sound') return dropPayload(payload, t);
   const clip = clipForPayload(p, payload, t);
   if (!clip) return;
+  if (clip.type === 'blur') {
+    // its own track above the footage (created when missing)
+    const res = await st.edit([{ op: 'addClip', clip }], 'Add blur');
+    if (res) useStudio.setState({ selection: [clip.id!] });
+    return;
+  }
   const overlay = clip.type === 'text' || clip.type === 'code' || (clip.type === 'scene' && getTemplate(clip.template)?.overlay);
   const score = (tr: Track): number => {
     const n = tr.name.toLowerCase();

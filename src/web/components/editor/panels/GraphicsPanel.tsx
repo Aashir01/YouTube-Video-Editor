@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Thumbnail } from '@remotion/player';
 import { toast } from 'sonner';
-import { Search } from 'lucide-react';
+import { EyeOff, Search } from 'lucide-react';
 import type { Clip, CompositionInput, Project } from '../../../../shared/schema';
 import { CAPTION_PRESETS } from '../../../../shared/schema';
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateDef } from '../../../../shared/templates';
@@ -155,6 +155,16 @@ export const GraphicsPanel: React.FC = () => {
               </Card>
               <Card payload={{ kind: 'text', preset: 'caption-box' }} title="Text box">
                 <ClipStill project={look} clip={textClips.box!} at={1} background="#151a2c" />
+              </Card>
+            </div>
+            <h3 className="label mt-5">Effects</h3>
+            <div className={cn('grid gap-2', cols)}>
+              <Card payload={{ kind: 'blur' }} title="Blur box" subtitle="Hide a face, plate or screen; it can follow it">
+                <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-slate-600 to-slate-800">
+                  <div className="flex size-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                    <EyeOff className="size-6 text-white/90" />
+                  </div>
+                </div>
               </Card>
             </div>
             <h3 className="label mt-5">Captions</h3>

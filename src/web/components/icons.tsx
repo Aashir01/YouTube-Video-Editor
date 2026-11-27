@@ -1,5 +1,5 @@
 import React from 'react';
-import { AudioLines, Captions, Clapperboard, CodeXml, Film, Image, Mic, Music, Sparkles, Type, Volume2 } from 'lucide-react';
+import { AudioLines, Captions, Clapperboard, CodeXml, EyeOff, Film, Image, Mic, Music, Sparkles, Type, Volume2 } from 'lucide-react';
 import type { Clip, Track } from '../../shared/schema';
 
 /** lucide v1 dropped brand icons; this is the YouTube play-button mark. */
@@ -35,6 +35,7 @@ export const CLIP_COLORS: Record<string, { bg: string; border: string; text: str
   scene: { bg: '#3a2366', border: '#8b5cf6', text: '#e6dbff' },
   code: { bg: '#4d1d43', border: '#ec4899', text: '#ffd6f1' },
   captions: { bg: '#3f3f12', border: '#d4d424', text: '#fbfbc8' },
+  blur: { bg: '#2a3140', border: '#8a9bb8', text: '#e2e8f4' },
 };
 
 export const clipColor = (clip: Clip) => CLIP_COLORS[clip.type === 'audio' ? clip.role : clip.type] ?? CLIP_COLORS.video!;
@@ -55,6 +56,8 @@ export const ClipIcon: React.FC<{ clip: Clip; className?: string }> = ({ clip, c
       return <CodeXml className={className} />;
     case 'captions':
       return <Captions className={className} />;
+    case 'blur':
+      return <EyeOff className={className} />;
   }
 };
 
