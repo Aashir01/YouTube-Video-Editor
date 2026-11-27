@@ -8,3 +8,5 @@ data/
 coverage/
 .vite/
 .cutroom-runtime/
+tests/e2e/.fixtures/
+tests/e2e/.out/
