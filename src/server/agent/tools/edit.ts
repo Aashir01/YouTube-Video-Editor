@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CaptionStyleSchema, TRACK_KINDS, TRANSITION_TYPES, type ClipInput, type Project } from '../../../shared/schema';
+import { CaptionStyleSchema, KEYFRAME_EASES, TRACK_KINDS, TRANSITION_TYPES, type ClipInput, type Project } from '../../../shared/schema';
 import { applyOps, type EditOp } from '../../../shared/ops';
 import { computeKeepSegments, formatTime, projectDuration, requireTrack, segmentsToClips, timelineWords, type Interval } from '../../../shared/timeline';
 import { getTemplate, parseTemplateProps } from '../../../shared/templates';
@@ -18,10 +18,11 @@ const CLIP_REFERENCE = `Clip fields (times in seconds, positions 0-1 of the canv
 - text: text (wrap words in *asterisks* to highlight), x, y (center anchor), style {font, size, weight, color, align, uppercase, background, padding, radius, strokeColor, strokeWidth, shadow, highlightColor, maxWidth}, animationIn/animationOut none|fade|rise|pop|slide-left|slide-right|typewriter|words|letters|blur-in|scale-down
 - scene: template, props (see list_templates) — prefer add_scene
 - code: use write_code_scene; captions: use add_captions
+- keyframes (animation, any video/image/text/audio clip): {channel: [{t (s from clip start), v, ease? ease-in-out (default)|linear|ease-in|ease-out|hold}]}. An animated channel overrides its static field and interpolates between keys. Channels: video/image box.x box.y box.w box.h (picture-in-picture frame; a full-frame box is created if missing) focus.x focus.y (pan the crop) scale (zoom) opacity rotation, +volume on video; text x y style.size opacity rotation; audio volume. E.g. a PiP that slides in and settles: {"box.x": [{t:0,v:1.02,ease:"ease-out"},{t:0.6,v:0.64}]}; a slow push-in: {scale:[{t:0,v:1,ease:"linear"},{t:6,v:1.15}]}; follow a subject in a 9:16 crop: focus.x keys every 1-2 s. Use setKeyframe/removeKeyframe ops for single keys.
 Tracks can be referenced by id or name: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX.`;
 
 const OpItem = z.object({
-  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'liftRange', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix', 'addMarker', 'removeMarker']),
+  op: z.enum(['addClip', 'updateClip', 'removeClips', 'moveClip', 'trimClip', 'splitClip', 'rippleDelete', 'liftRange', 'shiftClips', 'closeGaps', 'addTrack', 'updateTrack', 'removeTrack', 'reorderTrack', 'setAudioMix', 'addMarker', 'removeMarker', 'setKeyframe', 'removeKeyframe', 'clearKeyframes']),
   clip: z.record(z.string(), z.unknown()).optional().describe('addClip: the clip object'),
   clipId: z.string().optional(),
   clipIds: z.array(z.string()).optional(),
@@ -39,9 +40,12 @@ const OpItem = z.object({
   index: z.number().int().optional(),
   onConflict: z.enum(['error', 'new-track', 'overwrite', 'allow']).optional(),
   ripple: z.boolean().optional(),
-  time: z.number().optional().describe('addMarker: seconds'),
+  time: z.number().optional().describe('addMarker: seconds on the timeline; setKeyframe/removeKeyframe: seconds from the clip start'),
   label: z.string().optional().describe('addMarker: marker text'),
   markerId: z.string().optional(),
+  values: z.record(z.string(), z.number()).optional().describe('setKeyframe: channel -> value at `time`, e.g. {"opacity": 0, "box.x": 0.1}'),
+  channels: z.array(z.string()).optional().describe('removeKeyframe/clearKeyframes: limit to these channels (default all)'),
+  ease: z.enum(KEYFRAME_EASES).optional().describe('setKeyframe: how the value moves to the next keyframe'),
 });
 
 const resolveTrackIds = (p: Project, ids?: string[]) => ids?.map((t) => requireTrack(p, t).id);
@@ -87,13 +91,19 @@ const toEditOp = (p: Project, o: z.infer<typeof OpItem>): EditOp => {
       return { op: 'reorderTrack', trackId: need(trackId, 'trackId'), index: need(o.index, 'index') };
     case 'setAudioMix':
       return { op: 'setAudioMix', patch: need(o.patch, 'patch') };
+    case 'setKeyframe':
+      return { op: 'setKeyframe', clipId: need(o.clipId, 'clipId'), t: need(o.time, 'time'), values: need(o.values, 'values'), ease: o.ease };
+    case 'removeKeyframe':
+      return { op: 'removeKeyframe', clipId: need(o.clipId, 'clipId'), t: need(o.time, 'time'), channels: o.channels };
+    case 'clearKeyframes':
+      return { op: 'clearKeyframes', clipId: need(o.clipId, 'clipId'), channels: o.channels, keepAt: o.time };
   }
 };
 
 export const applyEdits = defineTool({
   name: 'apply_edits',
   category: 'edit',
-  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?} (cut a range and close the gap), liftRange {from, to, trackIds?} (clear a range, leave the gap), shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}, addMarker {time, label?} (review notes for the user), removeMarker {markerId}. onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
+  description: `Apply a batch of timeline edits atomically (all succeed or none). Ops: addClip {clip, trackId?, onConflict?}, updateClip {clipId, patch}, removeClips {clipIds, ripple?}, moveClip {clipId, start?, trackId?, onConflict?}, trimClip {clipId, start?, end?} (timeline edges), splitClip {clipId, at}, rippleDelete {from, to, trackIds?} (cut a range and close the gap), liftRange {from, to, trackIds?} (clear a range, leave the gap), shiftClips {from, delta, trackIds?}, closeGaps {trackId}, addTrack {name, kind}, updateTrack {trackId, patch: {name, muted, hidden, locked}}, removeTrack, reorderTrack {trackId, index}, setAudioMix {patch: {duckLevel, normalize, loudnessTarget}}, addMarker {time, label?} (review notes for the user), removeMarker {markerId}, setKeyframe {clipId, time (s from clip start), values {channel: value}, ease?}, removeKeyframe {clipId, time, channels?}, clearKeyframes {clipId, channels?, time? (value kept)}. onConflict: error (default) | new-track | overwrite | allow (crossfade overlap).\n${CLIP_REFERENCE}`,
   schema: z.object({ label: z.string().describe('Short description for undo history'), ops: z.array(OpItem).min(1).max(80) }),
   execute: async (input, ctx) => {
     let results: unknown[] = [];

@@ -9,9 +9,11 @@ import {
   YouTubeSchema,
   type Clip,
   type ClipInput,
+  type KeyframeEase,
   type Project,
   type TrackKind,
 } from './schema';
+import { clearKeyframes, moveKeyframes, removeKeyframes, sanitizeKeyframes, scaleKeyframeTimes, setKeyframeEase, setKeyframes } from './keyframes';
 import {
   addTrack,
   clearRange,
@@ -60,7 +62,13 @@ export type EditOp =
   | { op: 'addMarker'; time: number; label?: string; color?: string; id?: string }
   | { op: 'updateMarker'; markerId: string; patch: { time?: number; label?: string; color?: string } }
   | { op: 'removeMarker'; markerId: string }
-  | { op: 'removeAsset'; assetId: string };
+  | { op: 'removeAsset'; assetId: string }
+  /** keyframes: `t` is seconds from the clip start; `values` maps channels (e.g. "opacity", "box.x") to values */
+  | { op: 'setKeyframe'; clipId: string; t: number; values: Record<string, number>; ease?: KeyframeEase }
+  | { op: 'removeKeyframe'; clipId: string; t: number; channels?: string[] }
+  | { op: 'clearKeyframes'; clipId: string; channels?: string[]; keepAt?: number }
+  | { op: 'moveKeyframes'; clipId: string; from: number; to: number; channels?: string[] }
+  | { op: 'setKeyframeEase'; clipId: string; t: number; ease: KeyframeEase; channels?: string[] };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -89,6 +97,11 @@ export const updateClip = (p: Project, clipId: string, patch: Record<string, unk
     merged.props = parseTemplateProps(String(merged.template), merged.props);
   }
   const next = ClipSchema.parse(merged);
+  // a speed change re-times the footage, so its keyframes stretch with it
+  if ((next.type === 'video' || next.type === 'audio') && ref.clip.type === next.type && 'speed' in clean && !('keyframes' in clean)) {
+    scaleKeyframeTimes(next, ref.clip.speed / next.speed);
+  }
+  sanitizeKeyframes(next);
   if (conflictsOnTrack(ref.track, next).length > 0 && ('start' in clean || 'duration' in clean)) {
     throw new Error(`Updated clip would overlap another clip on "${ref.track.name}". Use moveClip with onConflict, or change start/duration.`);
   }
@@ -100,6 +113,16 @@ export const updateClip = (p: Project, clipId: string, patch: Record<string, unk
 const assertUnlocked = (p: Project, clipId: string) => {
   const ref = requireClip(p, clipId);
   if (ref.track.locked) throw new Error(`Track "${ref.track.name}" is locked`);
+};
+
+/** Run a keyframe edit on a copy of the clip, validate it, then store it. */
+const editKeyframes = <R>(p: Project, clipId: string, fn: (c: Clip) => R): R => {
+  const ref = requireClip(p, clipId);
+  if (ref.track.locked) throw new Error(`Track "${ref.track.name}" is locked`);
+  const draft = structuredClone(ref.clip);
+  const out = fn(draft);
+  ref.track.clips[ref.index] = ClipSchema.parse(draft);
+  return out;
 };
 
 export const applyOp = (p: Project, op: EditOp): unknown => {
@@ -213,6 +236,22 @@ export const applyOp = (p: Project, op: EditOp): unknown => {
     case 'removeMarker':
       p.markers = p.markers.filter((x) => x.id !== op.markerId);
       return null;
+    case 'setKeyframe':
+      if (!op.values || Object.keys(op.values).length === 0) throw new Error('setKeyframe needs "values", e.g. {"opacity": 0}');
+      return editKeyframes(p, op.clipId, (c) => setKeyframes(c, op.t, op.values, op.ease));
+    case 'removeKeyframe':
+      // lenient: removing a keyframe that is already gone is not an error
+      return editKeyframes(p, op.clipId, (c) => removeKeyframes(c, op.t, op.channels));
+    case 'clearKeyframes':
+      return editKeyframes(p, op.clipId, (c) => clearKeyframes(c, op.channels, op.keepAt));
+    case 'moveKeyframes':
+      return editKeyframes(p, op.clipId, (c) => {
+        const { duration } = c;
+        if (op.to < -0.001 || op.to > duration + 0.001) throw new Error(`Keyframe time ${op.to}s is outside the clip (0–${duration}s)`);
+        return moveKeyframes(c, op.from, op.to, op.channels);
+      });
+    case 'setKeyframeEase':
+      return editKeyframes(p, op.clipId, (c) => setKeyframeEase(c, op.t, op.ease, op.channels));
     case 'removeAsset': {
       const a = p.assets.find((x) => x.id === op.assetId);
       if (!a) throw new Error(`Asset ${op.assetId} not found`);
@@ -242,6 +281,16 @@ export const describeOps = (ops: EditOp[]): string => {
         return 'Trim clip';
       case 'splitClip':
         return 'Split clip';
+      case 'setKeyframe':
+        return 'Set keyframe';
+      case 'removeKeyframe':
+        return 'Delete keyframe';
+      case 'clearKeyframes':
+        return 'Remove animation';
+      case 'moveKeyframes':
+        return 'Move keyframe';
+      case 'setKeyframeEase':
+        return 'Keyframe easing';
       default:
         return o.op.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
     }

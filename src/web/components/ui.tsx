@@ -276,7 +276,9 @@ export const NumberField: React.FC<{
   precision?: number;
   className?: string;
   placeholder?: string;
-}> = ({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, unit, precision = 2, className, placeholder }) => {
+  /** extra control at the right end (e.g. a keyframe button) */
+  adornment?: React.ReactNode;
+}> = ({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, unit, precision = 2, className, placeholder, adornment }) => {
   const fmt = (v: number | undefined) => (v === undefined || Number.isNaN(v) ? '' : String(Math.round(v * 10 ** precision) / 10 ** precision));
   const [draft, setDraft] = useState(fmt(value));
   const focused = useRef(false);
@@ -348,6 +350,7 @@ export const NumberField: React.FC<{
         }}
       />
       {unit && <span className="pr-2 text-[11px] text-dim">{unit}</span>}
+      {adornment && <span className="flex shrink-0 items-center pr-1">{adornment}</span>}
     </label>
   );
 };
@@ -383,12 +386,15 @@ export const RangeField: React.FC<{
   step?: number;
   format?: (v: number) => string;
   className?: string;
-}> = ({ label, value, onChange, min, max, step = 0.01, format, className }) => (
+  /** extra control next to the value (e.g. a keyframe button) */
+  adornment?: React.ReactNode;
+}> = ({ label, value, onChange, min, max, step = 0.01, format, className, adornment }) => (
   <div className={cn('flex flex-col gap-1.5', className)}>
     {label && (
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between gap-2 text-xs">
         <span className="text-muted">{label}</span>
-        <span className="tabular-nums text-dim">{format ? format(value) : value}</span>
+        <span className="ml-auto tabular-nums text-dim">{format ? format(value) : value}</span>
+        {adornment}
       </div>
     )}
     <Slider.Root className="relative flex h-4 w-full touch-none select-none items-center" value={[value]} min={min} max={max} step={step} onValueChange={(v) => onChange(v[0] ?? value)}>
