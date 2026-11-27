@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import tty from 'node:tty';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { register } from 'tsx/esm/api';
 
@@ -23,6 +24,17 @@ if (major < 20 || (major === 20 && minor < 19)) {
 
 register();
 const importTs = (rel) => import(pathToFileURL(path.join(root, rel)).href);
+
+// The studio stops on Ctrl+C, `kill` and `docker stop`, and on a closed terminal window when it runs
+// in one. Without this, Node as a container's PID 1 ignores SIGTERM, and while a render browser is
+// open Remotion's listeners only close that browser and leave the server running. SIGHUP is left
+// alone without a terminal, so `nohup` keeps working.
+const exitOnSignals = () => {
+  const stop = () => process.exit(0);
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+  if (tty.isatty(0) || tty.isatty(1)) process.on('SIGHUP', stop);
+};
 
 const newestMtime = (dir) => {
   let newest = 0;
@@ -67,17 +79,20 @@ MCP (HTTP): while the studio runs, connect any MCP client to http://localhost:33
 
 switch (cmd) {
   case 'start': {
+    exitOnSignals();
     ensureWebBuild();
     const { startServer } = await importTs('src/server/main.ts');
     await startServer({ port: opt('--port') ? Number(opt('--port')) : undefined, host: opt('--host'), open: !flag('--no-open') });
     break;
   }
   case 'dev': {
+    exitOnSignals();
     const { startServer } = await importTs('src/server/main.ts');
     await startServer({ dev: true, port: opt('--port') ? Number(opt('--port')) : undefined, open: flag('--open') });
     break;
   }
   case 'mcp': {
+    exitOnSignals();
     const { runStdio } = await importTs('src/server/mcp/stdio.ts');
     await runStdio(opt('--port') ? Number(opt('--port')) : undefined);
     break;
