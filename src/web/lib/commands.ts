@@ -185,6 +185,7 @@ export const buildCommands = (): Command[] => {
     // panels
     { id: 'p-media', group: 'Panels', title: 'Media', icon: Film, run: panel('media') },
     { id: 'p-text', group: 'Panels', title: 'Transcript (text editing)', icon: TextQuote, run: panel('transcript') },
+    { id: 'p-shorts', group: 'Panels', title: 'Find Shorts (best moments)', icon: Smartphone, run: panel('shorts'), keywords: 'highlights clips viral repurpose vertical moments' },
     { id: 'p-graphics', group: 'Panels', title: 'Graphics & templates', icon: Sparkles, run: panel('graphics') },
     { id: 'p-audio', group: 'Panels', title: 'Audio & voiceover', icon: AudioLines, run: panel('audio') },
     { id: 'p-script', group: 'Panels', title: 'Script', icon: ScrollText, run: panel('script') },

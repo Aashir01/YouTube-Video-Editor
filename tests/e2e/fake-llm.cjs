@@ -42,8 +42,30 @@ const plan = (doneCount) => ({
   },
 });
 
+const textOf = (m) => (typeof m?.content === 'string' ? m.content : (m?.content ?? []).map((p) => p.text ?? '').join(''));
+
+// Find Shorts: pick the planted hooks by their sentence numbers, answering the way real models
+// often do (code fence, a trailing comma, an overlapping pick and an out-of-range one)
+const findShorts = (prompt) => {
+  const lines = [...prompt.matchAll(/^\[(\d+)\] \S+ (.*)$/gm)].map((m) => ({ n: Number(m[1]), text: m[2] }));
+  const at = (re) => lines.find((l) => re.test(l.text))?.n;
+  const focus = prompt.match(/What the creator wants: (.*)/)?.[1];
+  const tag = focus ? ` (${focus})` : '';
+  const picks = [];
+  const a = at(/^Here is the secret/);
+  const b = at(/^The biggest mistake/);
+  if (a !== undefined) picks.push({ from: a, to: a + 4, title: `The secret nobody shares${tag}`, why: 'Opens with a promise and pays it off', score: 9 });
+  if (b !== undefined) picks.push({ from: b, to: b + 4, title: `The biggest mistake${tag}`, why: 'Relatable and practical', score: 7 });
+  if (a !== undefined) picks.push({ from: a + 1, to: a + 5, title: 'Overlapping pick', why: 'duplicate', score: 5 });
+  picks.push({ from: 999, to: 1004, title: 'Out of range', why: '', score: 8 });
+  return 'Here are the best moments:\n```json\n{"shorts": [\n' + picks.map((p) => ' ' + JSON.stringify(p) + ',').join('\n') + '\n]}\n```';
+};
+
 const step = (body) => {
   const msgs = body.messages ?? [];
+  const system = textOf(msgs.find((m) => m.role === 'system'));
+  const lastUserText = textOf([...msgs].reverse().find((m) => m.role === 'user'));
+  if (!body.tools?.length && /YouTube Shorts editor/.test(system)) return { text: findShorts(lastUserText) };
   if (!body.tools?.length) return { text: 'Fake summary' };
   const called = [];
   for (const m of msgs) for (const tc of m.tool_calls ?? []) called.push(tc.function.name);

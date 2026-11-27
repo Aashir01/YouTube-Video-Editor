@@ -4,13 +4,14 @@ import type { Clip, Project, RenderRecord, Track, Word } from '../../shared/sche
 import { applyOps, type EditOp } from '../../shared/ops';
 import { findClip, formatTime, projectDuration } from '../../shared/timeline';
 import type { AgentEvent, ChatSnapshot } from '../../shared/agent-types';
+import type { MomentsState } from '../../shared/moments';
 import type { StudioEvent } from '../../server/events';
 import { api, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
 import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
-export type LeftTab = 'media' | 'transcript' | 'graphics' | 'script' | 'audio' | 'brand';
+export type LeftTab = 'media' | 'transcript' | 'shorts' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
 export type SettingsSection = 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
@@ -39,6 +40,8 @@ interface StudioStore {
   project: Project | null;
   history: HistoryInfo;
   transcripts: Record<string, Word[]>;
+  /** Moments found for Shorts (the Shorts tab). */
+  moments: MomentsState | null;
   chat: ChatSnapshot;
   jobs: Record<string, Job>;
   connected: boolean;
@@ -158,11 +161,18 @@ export const useStudio = create<StudioStore>((set, get) => {
     }
   };
 
+  const loadMoments = (id: string) =>
+    api
+      .moments(id)
+      .then((r) => get().projectId === id && set({ moments: r.state }))
+      .catch(() => undefined);
+
   const resync = async (id: string) => {
     const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
     if (get().projectId !== id) return;
     setProject(project, history);
     set({ chat });
+    void loadMoments(id);
   };
 
   const onEvent = (e: StudioEvent) => {
@@ -201,6 +211,9 @@ export const useStudio = create<StudioStore>((set, get) => {
         fn(e.message);
         return;
       }
+      case 'moments':
+        set({ moments: e.state });
+        return;
     }
   };
 
@@ -225,6 +238,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     project: null,
     history: { canUndo: false, canRedo: false },
     transcripts: {},
+    moments: null,
     chat: EMPTY_CHAT,
     jobs: {},
     connected: false,
@@ -259,12 +273,13 @@ export const useStudio = create<StudioStore>((set, get) => {
     openProject: async (id) => {
       disconnect?.();
       transcriptSig = '';
-      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
+      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, moments: null, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
       try {
         const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
         if (get().projectId !== id) return;
         setProject(project, history);
         set({ chat });
+        void loadMoments(id);
       } catch (err) {
         set({ loadError: errorText(err) });
         return;

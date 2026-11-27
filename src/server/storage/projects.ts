@@ -317,6 +317,21 @@ export class ProjectStore {
     return file;
   }
 
+  /** A small JSON file kept next to the project (found moments, caches): not part of the undoable document. */
+  async readSideFile<T>(projectId: string, name: string): Promise<T | null> {
+    if (!/^[\w.-]+\.json$/.test(name)) throw new Error('Invalid file name');
+    try {
+      return JSON.parse(await fsp.readFile(path.join(this.dir(projectId), name), 'utf8')) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async writeSideFile(projectId: string, name: string, data: unknown): Promise<void> {
+    if (!/^[\w.-]+\.json$/.test(name)) throw new Error('Invalid file name');
+    await writeJsonAtomic(path.join(this.dir(projectId), name), data);
+  }
+
   async transcriptsFor(project: Project): Promise<Record<string, Word[]>> {
     const out: Record<string, Word[]> = {};
     for (const a of project.assets) {

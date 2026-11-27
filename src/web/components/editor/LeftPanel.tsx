@@ -1,5 +1,5 @@
 import React from 'react';
-import { Film, Music, Palette, ScrollText, Sparkles, TextQuote } from 'lucide-react';
+import { Film, Music, Palette, ScrollText, Smartphone, Sparkles, TextQuote } from 'lucide-react';
 import { useStudio, type LeftTab } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { MediaPanel } from './panels/MediaPanel';
@@ -8,11 +8,13 @@ import { AudioPanel } from './panels/AudioPanel';
 import { ScriptPanel } from './panels/ScriptPanel';
 import { ProjectPanel } from './panels/ProjectPanel';
 import { TranscriptPanel } from './panels/TranscriptPanel';
+import { ShortsPanel } from './panels/ShortsPanel';
 
 // each area has its own hue (the same one the timeline uses for its clips)
 const TABS: { id: LeftTab; label: string; icon: React.ElementType; hue: string; bar: string }[] = [
   { id: 'media', label: 'Media', icon: Film, hue: 'text-hue-sky', bar: 'bg-hue-sky' },
   { id: 'transcript', label: 'Text', icon: TextQuote, hue: 'text-hue-yellow', bar: 'bg-hue-yellow' },
+  { id: 'shorts', label: 'Shorts', icon: Smartphone, hue: 'text-hue-ember', bar: 'bg-hue-ember' },
   { id: 'graphics', label: 'Graphics', icon: Sparkles, hue: 'text-hue-violet', bar: 'bg-hue-violet' },
   { id: 'audio', label: 'Audio', icon: Music, hue: 'text-hue-green', bar: 'bg-hue-green' },
   { id: 'script', label: 'Script', icon: ScrollText, hue: 'text-hue-amber', bar: 'bg-hue-amber' },
@@ -44,6 +46,7 @@ export const LeftPanel: React.FC = () => {
       <div className="min-w-0 flex-1">
         {tab === 'media' && <MediaPanel />}
         {tab === 'transcript' && <TranscriptPanel />}
+        {tab === 'shorts' && <ShortsPanel />}
         {tab === 'graphics' && <GraphicsPanel />}
         {tab === 'audio' && <AudioPanel />}
         {tab === 'script' && <ScriptPanel />}

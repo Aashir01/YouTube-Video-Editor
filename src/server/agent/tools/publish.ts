@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises';
 import { z } from 'zod';
 import { createShort } from '../../shorts';
+import { findMoments } from '../../moments';
 import { applyOp } from '../../../shared/ops';
 import { formatTime, projectDuration } from '../../../shared/timeline';
 import { bus } from '../../events';
@@ -97,6 +98,26 @@ export const renderVideo = defineTool({
       unsubscribe();
       ctx.signal.removeEventListener('abort', onAbort);
     }
+  },
+});
+
+export const findShorts = defineTool({
+  name: 'find_shorts',
+  category: 'publish',
+  description:
+    'Find the best moments of this video to post as YouTube Shorts: the studio AI reads the timeline transcript and returns ranked moments (timeline range, title, opening line, why it works, score 1-10), each starting on a hook and ending on a payoff. The list also shows in the editor\u2019s Shorts tab. Then make the chosen ones with create_short (one call per Short, with its range and title). Needs a transcript.',
+  schema: z.object({
+    count: z.number().int().min(1).max(12).optional().describe('How many moments (default 5)'),
+    minSeconds: z.number().min(5).max(170).optional().describe('Shortest length (default 20)'),
+    maxSeconds: z.number().min(10).max(180).optional().describe('Longest length (default 60)'),
+    focus: z.string().max(300).optional().describe('What to look for, e.g. "the funniest bits" or "practical tips"'),
+  }),
+  execute: async (input, ctx) => {
+    const state = await findMoments(ctx.projectId, { count: input.count, minSec: input.minSeconds, maxSec: input.maxSeconds, focus: input.focus }, ctx.signal);
+    const lines = state.moments.map(
+      (m, i) => `${i + 1}. [${m.score}/10] ${formatTime(m.start)}–${formatTime(m.end)} (${Math.round(m.end - m.start)}s) "${m.title}" — opens with: "${m.hook}"${m.why ? ` — ${m.why}` : ''} — range [${m.start}, ${m.end}]`,
+    );
+    return { text: `Found ${state.moments.length} moments for Shorts (best first):\n${lines.join('\n')}`, summary: `${state.moments.length} moments` };
   },
 });
 
