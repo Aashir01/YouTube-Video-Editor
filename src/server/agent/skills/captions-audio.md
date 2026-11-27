@@ -16,6 +16,7 @@ description: Caption styling per format, and audio mixing (voice, music ducking,
 - Position: long-form `bottom`; Shorts `center` with `offsetY` ≈ 0.08–0.15 (keeps clear of the Shorts UI at the bottom). Move captions up (`offsetY` negative) when lower thirds are on screen at the bottom.
 - Captions need transcripts: transcribe footage (`transcribe`) or use voiceover generated with `generate_voiceover` (word timings included).
 - Fix misheard words by editing the transcript (UI) — captions update automatically.
+- **Other languages** (reach viewers worldwide): `translate_subtitles` with language codes (it also translates the YouTube title and description; cheap to run again after edits, only new sentences are sent). Renders then write one SRT per language and the YouTube upload adds them as caption tracks. To burn a translation into the picture, `add_captions` with `language` (e.g. a Spanish version). For a voiced version in another language, `create_dub` makes a separate dubbed project (ask first: it uses voice-engine credits).
 
 ## Audio mixing
 - Voice is king: dialogue/voiceover at full level (volume 1). Everything else serves it.

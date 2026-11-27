@@ -27,6 +27,7 @@ npm run test:e2e -- --keep             # keep the temporary data folder afterwar
 | `palette` | Command palette, shortcuts sheet, undo history, save state, slash briefs, draft restore |
 | `shorts` | Make a Short from ranges (API and UI), audio-only and in–out exports, home recipes |
 | `moments` | Find Shorts: the AI's picks snapped to sentences, playing a moment, making a Short from it, noticing later edits, `find_shorts` over MCP |
+| `languages` | Subtitles in other languages: translating (and the YouTube title), SRT downloads, captions in a translation, re-translating only what an edit changed, subtitle files with renders, a dubbed version, `translate_subtitles` over MCP |
 | `agent` | A full Director session: plan, question card, edits, editor context, one-step undo |
 | `keyframes` | Keyframe buttons, auto-keying from fields and canvas drags, timeline diamonds, easing, presets, agent ops, rendered motion |
 | `reframe` | Smart reframe on moving and cutting faces and on a two-person conversation, re-checked on rendered frames; Track faces; Make a Short |

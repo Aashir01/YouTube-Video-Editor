@@ -306,6 +306,7 @@ export const CaptionsClipSchema = z.object({
     .describe('auto = generated live from the transcripts of clips on the timeline (stays in sync after edits); manual = uses `words`'),
   words: z.array(WordSchema).default([]).describe('Timeline-relative words (manual mode only)'),
   sourceTrackIds: z.array(Id).optional().describe('Tracks to caption in auto mode (default: all tracks with speech)'),
+  language: z.string().max(16).optional().describe('Show the captions translated into this language (a code from the subtitle languages, e.g. "es"); unset = the spoken language'),
   style: CaptionStyleSchema.default(CaptionStyleSchema.parse({})),
 });
 
@@ -513,6 +514,8 @@ export const RenderRecordSchema = z.object({
   sizeBytes: z.number().optional(),
   error: z.string().optional(),
   elapsedSec: z.number().optional(),
+  /** languages with their own subtitle file next to the render (<id>.<lang>.srt) */
+  subtitles: z.array(z.string()).optional(),
 });
 
 export const MarkerSchema = z.object({
@@ -644,6 +647,8 @@ export interface CompositionInput extends Record<string, unknown> {
   transcripts: Record<string, Word[]>;
   /** 'preview' in the editor, 'render' for final output, 'still' for QA frames */
   mode: 'preview' | 'render' | 'still';
+  /** language -> sentence -> translation (captions shown in another language) */
+  translations?: Record<string, Record<string, string>>;
 }
 
 export interface ThumbnailInput extends Record<string, unknown> {

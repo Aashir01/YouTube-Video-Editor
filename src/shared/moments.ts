@@ -49,24 +49,32 @@ export const MOMENT_LENGTHS = { short: [15, 30], standard: [20, 60], long: [30, 
 
 const SENTENCE_END = /[.!?…]["')\]]?$/;
 
-/** Group words into sentences: at sentence-ending punctuation, pauses, or ~30 words for run-ons. */
+/** Where sentences end: at sentence-ending punctuation, pauses, or ~30 words for run-ons. Ranges of word indices [from, to). */
+export const sentenceRanges = (words: Word[], maxWords = 30, maxGap = 0.9): [number, number][] => {
+  const out: [number, number][] = [];
+  let first = 0;
+  words.forEach((w, i) => {
+    const prev = words[i - 1];
+    if (prev && i > first && (SENTENCE_END.test(prev.text.trim()) || w.start - prev.end > maxGap || i - first >= maxWords)) {
+      out.push([first, i]);
+      first = i;
+    }
+  });
+  if (words.length > first) out.push([first, words.length]);
+  return out;
+};
+
+/** Group words into sentences (timeline seconds), as the AI reads them. */
 export const toSentences = (words: Word[], maxWords = 30, maxGap = 0.9): Sentence[] => {
   const out: Sentence[] = [];
-  let cur: Word[] = [];
-  const flush = () => {
-    const text = cur
+  for (const [a, b] of sentenceRanges(words, maxWords, maxGap)) {
+    const part = words.slice(a, b);
+    const text = part
       .map((w) => w.text.trim())
       .filter(Boolean)
       .join(' ');
-    if (cur.length && text) out.push({ index: out.length, start: cur[0]!.start, end: cur[cur.length - 1]!.end, text });
-    cur = [];
-  };
-  words.forEach((w, i) => {
-    const prev = words[i - 1];
-    if (prev && cur.length && (SENTENCE_END.test(prev.text.trim()) || w.start - prev.end > maxGap || cur.length >= maxWords)) flush();
-    cur.push(w);
-  });
-  flush();
+    if (text) out.push({ index: out.length, start: part[0]!.start, end: part[part.length - 1]!.end, text });
+  }
   return out;
 };
 

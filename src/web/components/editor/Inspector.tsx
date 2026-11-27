@@ -17,6 +17,7 @@ import {
   type VideoClip,
 } from '../../../shared/schema';
 import { templateCatalog } from '../../../shared/templates';
+import { language } from '../../../shared/subtitles';
 import { FONTS } from '../../../shared/fonts';
 import { clipEnd } from '../../../shared/timeline';
 import { api, mediaUrl, type TemplateInfo } from '../../lib/api';
@@ -544,9 +545,17 @@ const CodeEditor: React.FC<{ clip: CodeClip; patch: Patch }> = ({ clip, patch })
 const CaptionsEditor: React.FC<{ clip: CaptionsClip; patch: Patch }> = ({ clip, patch }) => {
   const st = clip.style;
   const style = (p: Record<string, unknown>) => patch({ style: p });
+  const languages = useStudio((s) => s.translations?.languages ?? []);
   return (
     <>
       <Section title="Captions">
+        <Field label="Language" hint={languages.length ? undefined : 'Add subtitle languages in Export → Languages'}>
+          <SelectField
+            value={clip.language ?? ''}
+            onChange={(v) => patch({ language: v || null })}
+            options={[{ value: '', label: 'Spoken language' }, ...[...new Set([...languages, ...(clip.language ? [clip.language] : [])])].map((code) => ({ value: code, label: `${language(code).name} (translated)` }))]}
+          />
+        </Field>
         <Field label="Source">
           <Segmented
             size="sm"

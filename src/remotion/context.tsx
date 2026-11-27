@@ -52,6 +52,8 @@ export interface StudioContextValue {
   transcripts: Record<string, Word[]>;
   mode: 'preview' | 'render' | 'still';
   speech: Interval[];
+  /** language -> sentence -> translation, for captions shown in another language */
+  translations: Record<string, Record<string, string>>;
 }
 
 const StudioContext = createContext<StudioContextValue | null>(null);
