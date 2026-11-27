@@ -3,7 +3,7 @@
 Browser tests that use Cutroom like a person does: clicking, dragging, typing and exporting in a real Chromium, against a real server.
 
 ```bash
-npm run test:e2e                       # every suite (about 5 minutes)
+npm run test:e2e                       # every suite (about 8 minutes)
 npm run test:e2e -- canvas keyframes   # only some suites
 npm run test:e2e -- --keep             # keep the temporary data folder afterwards
 ```

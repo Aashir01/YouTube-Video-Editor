@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 45 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 53 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -33,12 +33,15 @@ Main parts:
 |---|---|
 | `tracks[]` | Ordered tracks (`video`, `overlay`, `audio`, `captions`) with clips; later tracks paint on top |
 | clips | `video`, `image`, `audio`, `text`, `scene` (template + props), `code` (custom TSX), `captions` (auto or manual words), `blur` (a blurred box or ellipse over the picture) |
-| `assets[]` | Media and documents with probe metadata, thumbnail, waveform peaks, transcript status, analysis (silences, scenes, loudness), editing proxy, source/license |
+| `assets[]` | Media and documents with probe metadata, thumbnail, waveform peaks, transcript status, analysis (silences, scenes, loudness, beats and tempo of music), editing proxy, source/license; processed copies (background removed, stabilized, color look) record the original they were `derived` from |
 | `brief`, `brand` | What the video is (topic, audience, tone, format, length) and how it looks (colors, fonts, logo, watermark) |
 | `script` | Sections with exact narration and visual plan; linked to voiceover assets |
 | `youtube` | Title + options, description, tags, chapters, category, privacy, thumbnail design |
 | `markers[]` | Labelled review markers on the ruler (time, label, color), set by the user (`M`) or the Director |
-| `renders[]`, `audio` | Export records (video or audio-only, whole or a range); mix settings (duck level, loudness target) |
+| `renders[]`, `audio` | Export records (video or audio-only, whole or a range, with their subtitle languages); mix settings (duck level, loudness target) |
+| `multicam[]` | Groups of cameras and microphones of one recording, each placed on a shared clock (`offset`); camera cuts are video clips linked to their group |
+
+Some per-project data lives next to `project.json` instead of in it, because it is not part of the undoable edit: `moments.json` (Shorts found by the AI) and `translations.json` (the subtitle translation cache).
 
 Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX. A Blur track is added between B-roll and Graphics the first time a blur box is used; blur boxes may overlap each other, so several faces can be hidden at once.
 
@@ -46,7 +49,7 @@ Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX. A Blur 
 
 ## 2. Edits, history and live sync
 
-`src/shared/ops.ts` defines `EditOp`: `addClip`, `updateClip`, `moveClip`, `trimClip`, `splitClip`, `removeClips` (optionally ripple), `rippleDelete`, `liftRange` (clear a range, keep the gap), `shiftClips`, `closeGaps`, `addMarker` / `updateMarker` / `removeMarker`, keyframe ops (`setKeyframe`, `removeKeyframe`, `clearKeyframes`, `moveKeyframes`, `setKeyframeEase`), track ops, `setBrief` / `setBrand` / `setCanvas` / `setYoutube` / `setScript` / `setAudioMix`, and asset ops. `applyOps` mutates a draft and throws readable errors (overlaps, locked tracks, invalid template props, media bounds).
+`src/shared/ops.ts` defines `EditOp`: `addClip`, `updateClip`, `moveClip`, `trimClip`, `splitClip`, `removeClips` (optionally ripple), `rippleDelete`, `liftRange` (clear a range, keep the gap), `shiftClips`, `closeGaps`, `addMarker` / `updateMarker` / `removeMarker`, keyframe ops (`setKeyframe`, `removeKeyframe`, `clearKeyframes`, `moveKeyframes`, `setKeyframeEase`), multicam ops (`setMulticam`, `switchAngle`), track ops, `setBrief` / `setBrand` / `setCanvas` / `setYoutube` / `setScript` / `setAudioMix`, and asset ops. `applyOps` mutates a draft and throws readable errors (overlaps, locked tracks, invalid template props, media bounds).
 
 - **Server**: `ProjectStore.update(id, label, mutator)` serializes writes per project, validates the result, stores an undo snapshot, keeps "follower" clips attached to the end (auto captions, looping music), saves atomically and emits a `project` event.
 - **UI**: the Zustand store applies the same `applyOps` locally for instant feedback, then sends the ops. Requests are chained so the server sees them in order; the response from the latest one wins. Typing and sliders use `editSoon`, which merges patches per field and flushes after a pause, so a drag creates one undo step.
@@ -66,6 +69,8 @@ Because every change goes through the same ops, an edit made by the user, the Di
 - `code/runtime.tsx` handles **code scenes**. TSX written by the agent is compiled with Sucrase in the browser and renderer (never executed on the server) against a fixed module map (`react`, `remotion`, `@remotion/shapes|paths|noise|layout-utils`, and a `director` kit of helpers). A static check (`src/shared/code-check.ts`) rejects non-determinism and network access before a scene is saved, and an error boundary reports runtime errors back to the agent.
 - `Thumbnail.tsx` provides 6 thumbnail layouts (or custom code), rendered as a still.
 - **Blur clips** (`BlurView` in `clips.tsx`) blur whatever is painted below them with CSS `backdrop-filter`. An ellipse is a radial mask with a soft edge. The headless render browser draws them exactly as the preview does.
+- **Transparent video** (background removed): VP9 with alpha in WebM. The editor plays it natively, and the renderer extracts its frames as PNG (`OffthreadVideo transparent`) so the alpha survives.
+- **Captions in another language**: a captions clip with a `language` shows the translation (see "Subtitles in other languages"), right to left for Arabic, Hebrew, Persian and Urdu.
 - Fonts (12 families) are bundled locally, so preview and render are identical and work offline.
 
 The same composition runs in the editor (Remotion Player), the agent's QA frames (`renderStill`) and the final render.
@@ -97,7 +102,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 1. **Bundle** the composition with `@remotion/bundler`, cached by a hash of `src/remotion` and `src/shared`. It's warmed up at startup.
 2. Run `selectComposition` and `renderMedia` with a preset (`draft` at half resolution, `standard`, `high`, `4k`), optionally limited to an in–out `frameRange`. The headless browser fetches media from this server.
 3. **Loudness**: two-pass FFmpeg `loudnorm` to the project target (−14 LUFS by default).
-4. Write the **SRT** from the timeline words (shifted to the range when one is exported).
+4. Write the **SRT** from what the captions show (every captions clip, since an edit can split one), or from the timeline words without captions, shifted to the range when one is exported. Each subtitle language gets its own `<id>.<lang>.srt`.
 5. **Audio-only** exports render the mix as WAV, then encode an MP3 (320 kbps, with M4A as the fallback).
 6. Report progress over SSE. Renders are queued and can be cancelled.
 
@@ -120,6 +125,9 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
   - **When:** made automatically after analysis for codecs browsers can't play (anything but H.264, VP8, VP9 and AV1, e.g. HEVC or ProRes), for footage above 1080p, and for files over 20 minutes. The `render.proxies` setting picks `auto`, `always` or `off`, and the media card's menu creates or removes one by hand.
   - **What:** 540 px on the short side, H.264 (`veryfast`, CRF 27) with a keyframe every half second for quick seeking, AAC audio and `faststart`. They run on their own one-at-a-time job queue with progress.
   - **Use:** the preview's asset URLs point to the proxy (the **Playback quality** menu switches to the originals). Renders, frame reviews and analysis always read the original file.
+- **Sync by sound** (`media/audio.ts`, `shared/dsp.ts`): FFmpeg streams each file's sound at 8 kHz into loudness per 10 ms; the half-wave rectified change of log loudness (onsets) ignores the level, so different microphones match. Two recordings are lined up by FFT cross-correlation normalized by the energy of their overlap, with a parabola through the peak for sub-frame precision and a confidence (how far the peak stands out).
+- **Person segmentation** (`media/segment.ts`): MediaPipe's selfie segmentation (Apache-2.0), converted from TFLite to ONNX by `scripts/convert-selfie-segmentation.py` (which handles its custom transposed convolution) and bundled in `assets/models` (the landscape model for wide footage, the square one otherwise).
+- **Processed copies** (`bake.ts`): background removal, green screen, stabilizing and LUT looks process only the part of the source a clip uses, register the result as `derived` from the original, and switch the clip to it in one undo step; **Restore the original** switches back. Alpha videos are never proxied. File paths in FFmpeg filter options are escaped for both levels of the filter graph.
 - **Speech enhancement** (`enhanceSpeech`): `highpass` → `lowpass` → `afftdn` → `acompressor` → `loudnorm`, in light / medium / strong strengths. The video stream is copied, not re-encoded, and the transcript carries over to the new asset, which then replaces the original's clips in one undo step.
 
 ## 6. The Director agent
@@ -127,7 +135,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 45 in total):
+- **Tools** (`tools/`, 53 in total):
 
   | Category | Tools |
   |---|---|
@@ -137,10 +145,10 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
   | Research | `web_search`, `fetch_url` |
   | Script | `write_script`, `list_voices` |
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
-  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion` |
+  | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion`, `create_multicam`, `remove_background`, `stabilize_video`, `apply_lut`, `cut_to_beat` |
   | Motion | `list_templates`, `write_code_scene` |
   | Review | `check_timeline`, `preview_frames` |
-  | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `create_short`, `upload_to_youtube` |
+  | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `find_shorts`, `create_short`, `translate_subtitles`, `create_dub`, `upload_to_youtube` |
 
 - **Human in the loop**: `ask_user` renders a question card (choices, multi-select, text, file drop zone) and waits for the answer. Paid actions request approval unless autonomy is "auto", and YouTube upload always does. A message typed while the agent works is delivered between steps.
 - **Skills** are Markdown playbooks in `agent/skills/` plus user skills in `data/skills/`. They are loaded on demand to keep the base prompt small.
@@ -186,11 +194,41 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 2. Ripple-delete everything outside them on every track except music beds, last gap first, so graphics and b-roll stay aligned. Music keeps playing from the start and is cut to the new length.
 3. Switch the canvas to 1080×1920. Full-frame footage gets `fit: cover` with a focus point, and auto captions are added if none remain.
 4. Reset the markers and the YouTube metadata (`#shorts`, private).
-5. Copy only the assets still in use. Their files are hard-linked when possible, so a Short costs no extra disk space.
+5. Copy only the assets still in use. Their files are hard-linked when possible, so a Short costs no extra disk space. Multicam groups still in use keep all their cameras, so cuts can still switch.
+
+### Find Shorts
+
+`src/server/moments.ts` and `src/shared/moments.ts` (the Shorts tab, `find_shorts`):
+1. The timeline words become numbered sentences with times. Long transcripts are read in overlapping stretches (about 24k characters each, three at a time) so modest context windows work.
+2. The AI answers with sentence numbers (JSON, read forgivingly: code fences, prose, trailing commas), so every moment starts and ends exactly on a sentence.
+3. Picks are snapped with a little air (never into the neighboring sentence), trimmed or extended by whole sentences to the length limits, and overlaps go to the better score.
+4. The list is saved in `moments.json` with a fingerprint of the words: the tab (and the server, which refuses stale times) knows when the edit has changed since. Making a Short reuses `createShort` and remembers the new project.
+
+### Multicam
+
+`src/server/multicam.ts` and `src/shared/multicam.ts` (the Multicam dialog, `create_multicam`):
+1. **Sync**: every camera and microphone is lined up with the first camera by sound (see "Sync by sound").
+2. **Who talks**: with one microphone per person, their RMS level (the other voice bleeding in stays far below); otherwise mouth movement in each close-up (`analyzeTalking`), with the speech of the main recording as a mask. Microphones are matched to the close-up whose mouth follows them best. The camera with the most people is the wide shot.
+3. **Cutting** (`planCameraCuts`, pure): each person's level above their resting level, scaled so talking is about 1; a new speaker must lead for 1 s, shots last at least 2 s, cuts move back to when the speaker started (snapped to a sentence start), people talking over each other get the wide shot, and long monologues an occasional cutaway. A camera that was not recording hands over to the wide shot (or any that was).
+4. **The edit**: camera cuts are ordinary video clips with their sound off, linked to the group (`multicam`); the microphones (or the first camera) play as continuous audio on their own tracks. `switchAngle` shows another camera at the same moment (`trimStart` moves by the offset difference), optionally cutting first at the playhead: that is what keys 1–9 do.
+
+### Subtitles in other languages
+
+`src/server/subtitles.ts` and `src/shared/subtitles.ts` (Export → Languages, `translate_subtitles`):
+- **Cache, not copies.** Translations are kept per language as sentence text → translation (`translations.json`). Subtitles are always rebuilt from what the captions show now, so they follow every edit, and only new sentences go to the AI (in batches of about 3,500 characters, as numbered lines, answered as JSON). The YouTube title and description are translated too, and re-translated when they change.
+- **Timing.** A translated sentence takes the original's time span, its words spread by length; Chinese, Japanese and Thai are cut into a few characters at word boundaries (`Intl.Segmenter`), never inside a character. Sentences not translated yet show in the original.
+- **Where they go.** An SRT per language from the API, next to every render, and as caption tracks on YouTube with the translated title and description (`localizations`); captions with a `language` show one in the picture.
+- **Dubbed versions** (`src/server/dub.ts`, `create_dub`): a derived project where each line (short sentences joined) is voiced where it was said, sped up to 1.35× when the translation runs long (then cut short), the original speech lowered to 12% or muted, captions fixed to the translation, and the YouTube text translated.
+
+### Beats
+
+`src/shared/beats.ts` (the music clip's **Find the beats**, `cut_to_beat`):
+- **Tracking.** The tempo is the autocorrelation peak of the loudness onsets between 60 and 180 BPM, weighted toward 120; the beats are the best path through the onsets with steps close to that period (dynamic programming, after Ellis 2007), so it follows tempo drift and quiet breaks. They are kept with the asset.
+- **Using them.** Music clips show their beats on the timeline, and every drag snaps to them. **Cut to the beat** re-times the chosen clips back to back from the beat nearest the first, each lasting whole beats (about as long as before, or `every` N beats), within what a video has left of its source.
 
 ## 7. MCP
 
-- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 42 non-chat Director tools plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
+- **Server** (`src/server/mcp/server.ts`): `/mcp` uses the Streamable HTTP transport, and `director mcp` runs over stdio. Stdio bridges to a running studio, or starts one in-process. It exposes the 50 Director tools that need no chat (all but `ask_user`, `update_plan` and `delegate`) plus `list_projects`, `create_project`, `select_project` and `import_file`, and the prompts `produce_video` and `edit_footage`. Changes appear live in any open editor.
 - **Client** (`src/server/mcp/client.ts`): servers configured in Settings (stdio or HTTP) are connected at startup and on change. Their tools are offered to the Director as `mcp__<server>__<tool>`.
 
 ## 8. The editor UI
@@ -208,6 +246,10 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 - **Command palette** (`lib/commands.ts`, `editor/CommandPalette.tsx`): fuzzy search over commands, clips and times, plus one-line Director briefs.
 - **Tracking and blur** (`editor/Tracking.tsx`): the Motion tracking buttons (follow a face or what's under the clip), **Blur faces**, and the blur box editor (shape, strength, opacity). Blur boxes are moved and resized on the canvas like any box.
 - **Preview** (`editor/Preview.tsx`): plays proxies when they exist. The **Playback quality** menu switches to the originals.
+- **Shorts tab** (`panels/ShortsPanel.tsx`): finding moments (how many, length, what to look for), playing one (it sets the in/out range), making Shorts, and noticing when the edit changed.
+- **Multicam** (`editor/MulticamDialog.tsx`, the Media panel's camera button): pick cameras in order and microphones, follow the speaker or stay on camera 1. Cuts are labeled "Cam N", switched from the clip menu, the Inspector's Multicam section, or keys 1–9 at the playhead.
+- **Languages** (`editor/LanguagesPanel.tsx`, a tab of Export): add languages, see what is new since the last translation, download SRTs, show a language in the captions, make a dubbed version. The captions Inspector has a Language picker too.
+- **Background and Footage** (Inspector sections in `editor/Tracking.tsx`): remove the background or a green screen (with a blurred original behind), stabilize, apply a .cube look at any strength, and restore the original. Music clips get a Beats row.
 - **Recording** (`editor/RecordDialog.tsx`): `getUserMedia` / `getDisplayMedia` + `MediaRecorder`, uploaded as a normal asset and placed at the playhead.
 - `window.cutroom` exposes the store and player for automation and end-to-end tests.
 
@@ -237,10 +279,11 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 
 ## 11. Tests
 
-- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts, the reframe and motion planners, proxies, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic face tracks.
+- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
 - **End to end** (`npm run test:e2e`, `tests/e2e/`): Playwright drives a real Chromium against `director start` on a temporary data folder. A scripted OpenAI-compatible model stands in for the AI.
-  - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers" and 1440p and HEVC files.
-  - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames. Faces are re-detected on renders to check reframing and blur. Any browser console error fails a suite.
+  - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers", a multicam recording (three cameras and mics that started at different moments), a green screen, shaky footage, a drum loop, and 1440p and HEVC files.
+  - **The scripted model** also finds Shorts, translates subtitles, and speaks for dubbed versions (the runner points OpenAI voices at it with `OPENAI_BASE_URL`).
+  - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames: faces are re-detected on renders to check reframing and blur, pixel colors show which camera is on or what shows through a removed background, and shake is measured with the app's own tracker. Any browser console error fails a suite.
 
 ## 12. Security notes
 
