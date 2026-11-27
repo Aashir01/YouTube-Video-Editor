@@ -19,9 +19,9 @@ import {
 import { templateCatalog } from '../../../shared/templates';
 import { FONTS } from '../../../shared/fonts';
 import { clipEnd } from '../../../shared/timeline';
-import { api, type TemplateInfo } from '../../lib/api';
+import { api, mediaUrl, type TemplateInfo } from '../../lib/api';
 import { clipLabel, getClipRef, useStudio } from '../../lib/store';
-import { duplicateSelection, enhanceSpeech, splitAtPlayhead } from '../../lib/actions';
+import { duplicateSelection, enhanceSpeech, splitAtPlayhead, switchClipCamera } from '../../lib/actions';
 import { cn, errorText } from '../../lib/utils';
 import { ClipIcon, clipColor } from '../icons';
 import { Badge, ColorField, Empty, Field, NumberField, RangeField, Section, Segmented, SelectField, Switch, TextArea } from '../ui';
@@ -287,6 +287,40 @@ const Motion: React.FC<{ clip: VideoClip | ImageClip; patch: Patch }> = ({ clip,
 // ---------------------------------------------------------------------------
 // Type editors
 // ---------------------------------------------------------------------------
+
+/** Multicam cut: which camera it shows (click another to switch at the same moment). */
+const MulticamSection: React.FC<{ clip: VideoClip }> = ({ clip }) => {
+  const project = useStudio((s) => s.project!);
+  const group = project.multicam.find((g) => g.id === clip.multicam);
+  if (!group) return null;
+  const current = group.angles.findIndex((a) => a.assetId === clip.assetId);
+  return (
+    <Section title="Multicam">
+      <div className="grid grid-cols-3 gap-1.5">
+        {group.angles.map((a, i) => {
+          const asset = project.assets.find((x) => x.id === a.assetId);
+          return (
+            <button
+              key={a.assetId}
+              aria-pressed={i === current}
+              aria-label={`Camera ${i + 1}`}
+              title={asset?.name}
+              onClick={() => i !== current && switchClipCamera(clip.id, i)}
+              className={cn('flex flex-col items-center gap-1 rounded-lg border p-1 transition-colors', i === current ? 'border-accent bg-accent/10' : 'border-line hover:border-line-2')}
+            >
+              {asset?.thumb ? <img src={mediaUrl(project.id, asset.thumb)} className="aspect-video w-full rounded object-cover" alt="" /> : <div className="aspect-video w-full rounded bg-black/30" />}
+              <span className="text-[10px] font-semibold">
+                {i + 1}
+                {group.wide === i ? ' · wide' : ''}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] leading-relaxed text-dim">Press 1–9 to cut to a camera at the playhead.</p>
+    </Section>
+  );
+};
 
 const VideoEditor: React.FC<{ clip: VideoClip; patch: Patch }> = ({ clip, patch }) => {
   const projectId = useStudio((s) => s.projectId)!;
@@ -649,6 +683,7 @@ export const Inspector: React.FC = () => {
       </div>
       <div className={cn('min-h-0 flex-1 overflow-y-auto', track.locked && 'pointer-events-none opacity-60')}>
         <Timing clip={clip} patch={patch} />
+        {clip.type === 'video' && clip.multicam && <MulticamSection clip={clip} />}
         {clip.type === 'video' && <VideoEditor clip={clip} patch={patch} />}
         {clip.type === 'image' && <ImageEditor clip={clip} patch={patch} />}
         {clip.type === 'audio' && <AudioEditor clip={clip} patch={patch} />}

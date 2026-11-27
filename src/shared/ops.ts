@@ -5,6 +5,7 @@ import {
   CanvasSchema,
   ClipSchema,
   MarkerSchema,
+  MulticamGroupSchema,
   ScriptSchema,
   YouTubeSchema,
   type Clip,
@@ -28,9 +29,11 @@ import {
   splitClip,
   trimClip,
   type ConflictMode,
+  clipEnd,
   conflictsOnTrack,
 } from './timeline';
 import { parseTemplateProps } from './templates';
+import { switchAnglePatch } from './multicam';
 
 /**
  * Edit operations shared by the editor UI, the agent tools and the MCP server.
@@ -68,7 +71,11 @@ export type EditOp =
   | { op: 'removeKeyframe'; clipId: string; t: number; channels?: string[] }
   | { op: 'clearKeyframes'; clipId: string; channels?: string[]; keepAt?: number }
   | { op: 'moveKeyframes'; clipId: string; from: number; to: number; channels?: string[] }
-  | { op: 'setKeyframeEase'; clipId: string; t: number; ease: KeyframeEase; channels?: string[] };
+  | { op: 'setKeyframeEase'; clipId: string; t: number; ease: KeyframeEase; channels?: string[] }
+  /** multicam: add or replace a group of synced cameras and microphones */
+  | { op: 'setMulticam'; group: Record<string, unknown> }
+  /** show camera `angle` (0-based) in a multicam cut at the same moment; with `at` inside the clip, cut there first */
+  | { op: 'switchAngle'; clipId: string; angle: number; at?: number };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -252,12 +259,37 @@ export const applyOp = (p: Project, op: EditOp): unknown => {
       });
     case 'setKeyframeEase':
       return editKeyframes(p, op.clipId, (c) => setKeyframeEase(c, op.t, op.ease, op.channels));
+    case 'setMulticam': {
+      const group = MulticamGroupSchema.parse(op.group);
+      for (const a of [...group.angles, ...group.audio]) if (!p.assets.some((x) => x.id === a.assetId)) throw new Error(`Asset ${a.assetId} not found`);
+      const i = p.multicam.findIndex((g) => g.id === group.id);
+      if (i >= 0) p.multicam[i] = group;
+      else p.multicam.push(group);
+      return group.id;
+    }
+    case 'switchAngle': {
+      assertUnlocked(p, op.clipId);
+      let id = op.clipId;
+      const ref = requireClip(p, id);
+      if (ref.clip.type !== 'video' || !ref.clip.multicam) throw new Error('Only multicam camera cuts can switch cameras');
+      if (op.at !== undefined && op.at > ref.clip.start + 0.02 && op.at < clipEnd(ref.clip) - 0.02) id = splitClip(p, id, op.at)[1];
+      const clip = requireClip(p, id).clip as Extract<Clip, { type: 'video' }>;
+      return updateClip(p, id, switchAnglePatch(p, clip, op.angle)).id;
+    }
     case 'removeAsset': {
       const a = p.assets.find((x) => x.id === op.assetId);
       if (!a) throw new Error(`Asset ${op.assetId} not found`);
       for (const t of p.tracks) t.clips = t.clips.filter((c) => !('assetId' in c) || c.assetId !== op.assetId);
       p.assets = p.assets.filter((x) => x.id !== op.assetId);
       if (p.brand.logoAssetId === op.assetId) delete p.brand.logoAssetId;
+      // a multicam group loses that camera or microphone (and goes when no camera is left)
+      p.multicam = p.multicam.flatMap((g) => {
+        const wideId = g.wide !== undefined ? g.angles[g.wide]?.assetId : undefined;
+        const angles = g.angles.filter((x) => x.assetId !== op.assetId);
+        if (!angles.length) return [];
+        const wide = angles.findIndex((x) => x.assetId === wideId);
+        return [{ ...g, angles, audio: g.audio.filter((x) => x.assetId !== op.assetId), wide: wide >= 0 ? wide : undefined }];
+      });
       return a.file;
     }
   }
@@ -291,6 +323,10 @@ export const describeOps = (ops: EditOp[]): string => {
         return 'Move keyframe';
       case 'setKeyframeEase':
         return 'Keyframe easing';
+      case 'switchAngle':
+        return `Camera ${o.angle + 1}`;
+      case 'setMulticam':
+        return 'Multicam';
       default:
         return o.op.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
     }

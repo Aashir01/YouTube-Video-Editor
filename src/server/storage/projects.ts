@@ -268,6 +268,11 @@ export class ProjectStore {
     for (const t of draft.tracks) for (const c of t.clips) if ('assetId' in c) used.add(c.assetId);
     for (const t of draft.tracks) for (const c of t.clips) if (c.type === 'scene') for (const v of Object.values(c.props)) if (typeof v === 'string' && v.startsWith('asset_')) used.add(v);
     if (draft.brand.logoAssetId) used.add(draft.brand.logoAssetId);
+    // multicam groups still in use keep all their cameras and microphones (so cuts can still switch)
+    const groups = new Set<string>();
+    for (const t of draft.tracks) for (const c of t.clips) if (c.type === 'video' && c.multicam) groups.add(c.multicam);
+    draft.multicam = draft.multicam.filter((g) => groups.has(g.id));
+    for (const g of draft.multicam) for (const src of [...g.angles, ...g.audio]) used.add(src.assetId);
     draft.assets = draft.assets.filter((a) => used.has(a.id));
     const copy = await this.create({ name }, draft);
     for (const a of draft.assets) {

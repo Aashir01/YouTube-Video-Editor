@@ -24,6 +24,8 @@ import { listVoices, pickTtsEngine } from '../services/tts';
 import { mcpManager } from '../mcp/client';
 import { createShort } from '../shorts';
 import { findMoments, momentsAreCurrent, readMoments, shortFromMoment } from '../moments';
+import { applyMulticam, planMulticam } from '../multicam';
+import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 
 export const api = new Hono();
@@ -150,6 +152,24 @@ api.post('/projects/:id/shorts', async (c) => {
     .parse(await c.req.json());
   const short = await createShort(c.req.param('id'), body.ranges, { title: body.title, focusX: body.focusX });
   return c.json({ id: short.id, name: short.name, duration: projectDuration(short) });
+});
+
+/** Multicam: sync cameras and microphones by sound and cut between them. */
+api.post('/projects/:id/multicam', async (c) => {
+  const id = c.req.param('id');
+  const body = z
+    .object({
+      cameras: z.array(z.string()).min(1).max(9),
+      microphones: z.array(z.string()).max(8).optional(),
+      follow: z.enum(['speaker', 'first']).optional(),
+      wide: z.string().optional(),
+      at: z.number().min(0).optional(),
+      name: z.string().max(80).optional(),
+    })
+    .parse(await c.req.json());
+  const plan = await analysisQueue.add(id, 'Multicam: syncing by sound', async (report) => planMulticam(await store.get(id), body, undefined, report));
+  await store.update(id, 'Multicam edit', (d) => void applyMulticam(d, plan), { source: 'user' });
+  return c.json({ groupId: plan.group.id, summary: plan.summary, warnings: plan.warnings, cuts: plan.cuts.length });
 });
 
 /** Find Shorts: the moments the AI picked (and whether the edit changed since). */

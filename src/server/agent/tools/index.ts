@@ -12,6 +12,7 @@ import { createShortTool, designThumbnail, findShorts, renderVideo, setYouTubeMe
 import { uploadToYouTube } from './youtube';
 import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
+import { createMulticam } from './multicam';
 
 /** All built-in tools, in a stable order (keeps prompt caching effective). */
 export const BUILTIN_TOOLS: AgentTool[] = [
@@ -36,6 +37,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   autoReframe,
   blurFaces,
   trackMotion,
+  createMulticam,
   webSearchTool,
   fetchUrl,
   writeScript,

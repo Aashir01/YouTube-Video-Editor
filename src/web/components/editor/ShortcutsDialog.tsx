@@ -20,6 +20,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     title: 'Editing',
     rows: [
       ['S  or  ' + M + ' B', 'Split at playhead'],
+      ['1 – 9', 'Multicam: cut to camera 1–9 at the playhead'],
       ['Q / W', 'Ripple-trim clip start / end to playhead'],
       ['⌫', 'Delete selected'],
       ['⇧ ⌫', 'Ripple delete (close the gap)'],

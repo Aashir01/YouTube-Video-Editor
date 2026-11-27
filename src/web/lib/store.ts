@@ -75,6 +75,8 @@ interface StudioStore {
   undoSteps: (n: number) => Promise<void>;
   /** Open recorder (voice / camera / screen), or null. */
   recorder: 'voice' | 'camera' | 'screen' | null;
+  /** The multicam dialog is open. */
+  multicamOpen: boolean;
   /** Asset ids attached to the next chat message. */
   composerAttachments: string[];
   attachToChat: (assetIds: string[]) => void;
@@ -261,6 +263,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     composerPrefill: null,
     composerAttachments: [],
     recorder: null,
+    multicamOpen: false,
     unsaved: 0,
     undoSteps: async (n) => {
       for (let i = 0; i < n && get().history.canUndo; i++) await get().undo();
@@ -450,6 +453,10 @@ export const getClipRef = (p: Project | null, clipId: string): { clip: Clip; tra
 
 export const clipLabel = (clip: Clip, p?: Project | null): string => {
   if (clip.name) return clip.name;
+  if (clip.type === 'video' && clip.multicam && p) {
+    const cam = p.multicam.find((g) => g.id === clip.multicam)?.angles.findIndex((a) => a.assetId === clip.assetId) ?? -1;
+    if (cam >= 0) return `Cam ${cam + 1} · ${p.assets.find((a) => a.id === clip.assetId)?.name ?? 'video'}`;
+  }
   switch (clip.type) {
     case 'video':
     case 'image':

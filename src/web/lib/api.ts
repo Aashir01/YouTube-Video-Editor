@@ -148,6 +148,8 @@ export const api = {
   moments: (id: string) => get<{ state: MomentsState | null; current: boolean }>(`/api/projects/${id}/moments`),
   findMoments: (id: string, opts: { count?: number; minSec?: number; maxSec?: number; focus?: string }) => send<{ state: MomentsState; current: boolean }>('POST', `/api/projects/${id}/moments`, opts),
   shortFromMoment: (id: string, momentId: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/moments/${momentId}/short`),
+  createMulticam: (id: string, body: { cameras: string[]; microphones?: string[]; follow?: 'speaker' | 'first'; wide?: string; at?: number }) =>
+    send<{ groupId: string; summary: string; warnings: string[]; cuts: number }>('POST', `/api/projects/${id}/multicam`, body),
   cancelRender: (id: string, renderId: string) => send('POST', `/api/projects/${id}/render/${renderId}/cancel`),
   deleteRender: (id: string, renderId: string) => send('DELETE', `/api/projects/${id}/render/${renderId}`),
   renderPresets: () => get<{ id: string; label: string }[]>('/api/render-presets'),

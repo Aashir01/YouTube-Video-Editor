@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURES_VERSION = 4;
+const FIXTURES_VERSION = 6;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(process.argv[2] ?? path.join(here, '.fixtures'));
 const portrait = path.join(here, 'fixtures', 'portrait.jpg');
@@ -45,6 +45,33 @@ run('two-speakers.mp4', [
   '-filter_complex', `[1]scale=540:540,split[a][b];[0][a]overlay=x=60:y=270:shortest=1[l];[l][b]overlay=x=1320:y=270:shortest=1,${mouth(267, 'lt(t\\,4)+gte(t\\,8)')},${mouth(1527, 'between(t\\,4\\,8)')}[v]`,
   '-map', '[v]', '-map', '2:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-t', '12',
 ]);
+
+// a multicam podcast: one 14 s "room" sound (noise bursts); the two-person scene filmed by a wide camera
+// (12 s, white corner), a left close-up that started 1.5 s later (red) and a right one 0.7 s later
+// (blue), plus a lav mic that started 1 s before the wide camera. Each has its own level and noise.
+run('mc-world.wav', ['-f', 'lavfi', '-i', "aevalsrc='0.5*(random(0)*2-1)*gt(sin(2*PI*0.9*t)+sin(2*PI*1.37*t+0.5)+sin(2*PI*0.31*t+1.3)\\,0.4)':s=16000:d=14", '-ac', '1']);
+run('mc-scene.mp4', [
+  '-f', 'lavfi', '-i', 'color=c=0x556070:s=1920x1080:d=12:r=30', '-loop', '1', '-i', portrait,
+  '-filter_complex', `[1]scale=540:540,split[a][b];[0][a]overlay=x=60:y=270:shortest=1[l];[l][b]overlay=x=1320:y=270:shortest=1,${mouth(267, 'lt(t\\,4)+gte(t\\,8)')},${mouth(1527, 'between(t\\,4\\,8)')}[v]`,
+  '-map', '[v]', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-t', '12',
+]);
+const world = path.join(out, 'mc-world.wav');
+const scene = path.join(out, 'mc-scene.mp4');
+const camera = (name, { from, len, crop, color, level, seed }) =>
+  run(name, [
+    '-i', scene, '-i', world,
+    '-filter_complex',
+    `[0]trim=start=${from}:duration=${len},setpts=PTS-STARTPTS${crop ? `,crop=${crop}` : ''},drawbox=x=0:y=0:w=80:h=80:color=${color}:t=fill[v];` +
+      `[1]atrim=start=${from + 1}:duration=${len},asetpts=PTS-STARTPTS,volume=${level}[a0];anoisesrc=d=${len}:c=white:r=16000:a=0.01:seed=${seed}[n];[a0][n]amix=inputs=2:duration=first:normalize=0[a]`,
+    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1',
+  ]);
+camera('mc-wide.mp4', { from: 0, len: 12, color: 'white', level: 0.8, seed: 11 });
+camera('mc-left.mp4', { from: 1.5, len: 10.5, crop: '1280:720:0:180', color: 'red', level: 1.0, seed: 12 });
+camera('mc-right.mp4', { from: 0.7, len: 10.8, crop: '1280:720:640:180', color: 'blue', level: 0.6, seed: 13 });
+run('mc-mic.m4a', ['-i', world, '-af', 'atrim=duration=13,volume=1.2', '-c:a', 'aac', '-ac', '1']);
+// one lav mic per person: loud while they talk, the other voice bleeding in at -18 dB
+run('mc-mic-left.m4a', ['-i', world, '-af', "atrim=duration=13,volume='if(between(t\\,1\\,5)+between(t\\,9\\,13)\\,1\\,0.12)':eval=frame", '-c:a', 'aac', '-ac', '1']);
+run('mc-mic-right.m4a', ['-i', world, '-af', "atrim=duration=13,volume='if(between(t\\,5\\,9)\\,1\\,0.12)':eval=frame", '-c:a', 'aac', '-ac', '1']);
 
 // heavy footage for the proxy tests: 1440p H.264, and HEVC when this FFmpeg can encode it (iPhone-style)
 run('big.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=2560x1440:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);
