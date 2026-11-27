@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURES_VERSION = 6;
+const FIXTURES_VERSION = 7;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(process.argv[2] ?? path.join(here, '.fixtures'));
 const portrait = path.join(here, 'fixtures', 'portrait.jpg');
@@ -72,6 +72,16 @@ run('mc-mic.m4a', ['-i', world, '-af', 'atrim=duration=13,volume=1.2', '-c:a', '
 // one lav mic per person: loud while they talk, the other voice bleeding in at -18 dB
 run('mc-mic-left.m4a', ['-i', world, '-af', "atrim=duration=13,volume='if(between(t\\,1\\,5)+between(t\\,9\\,13)\\,1\\,0.12)':eval=frame", '-c:a', 'aac', '-ac', '1']);
 run('mc-mic-right.m4a', ['-i', world, '-af', "atrim=duration=13,volume='if(between(t\\,5\\,9)\\,1\\,0.12)':eval=frame", '-c:a', 'aac', '-ac', '1']);
+
+// background removal: a talking head filling the frame in front of a grey wall, and one on a green screen
+const still = (name, bg, size) =>
+  run(name, [
+    '-f', 'lavfi', '-i', `color=c=${bg}:s=1280x720:d=3:r=30`, '-loop', '1', '-i', portrait, '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=44100:duration=3',
+    '-filter_complex', `[1]scale=${size}:${size}[p];[0][p]overlay=x=(W-w)/2:y=H-h:shortest=1[v]`,
+    '-map', '[v]', '-map', '2:a', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-t', '3',
+  ]);
+still('talkhead.mp4', '0x777777', 720);
+still('greenscreen.mp4', '0x00B140', 560);
 
 // heavy footage for the proxy tests: 1440p H.264, and HEVC when this FFmpeg can encode it (iPhone-style)
 run('big.mp4', ['-f', 'lavfi', '-i', 'testsrc2=s=2560x1440:r=30:d=4', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-shortest']);

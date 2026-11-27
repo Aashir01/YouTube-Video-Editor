@@ -51,6 +51,10 @@ export interface RegisterOptions {
   wait?: boolean;
   /** label for the history entry */
   label?: string;
+  /** the picture has transparency (kept through analysis; never proxied) */
+  alpha?: boolean;
+  /** made from another asset (background removed, stabilized, color look) */
+  derived?: Asset['derived'];
   updateSource?: 'user' | 'agent' | 'system' | 'mcp';
 }
 
@@ -86,6 +90,8 @@ export const registerAsset = async (projectId: string, opts: RegisterOptions): P
     tags: opts.tags ?? [],
     source: opts.source,
     voice: opts.voice,
+    ...(opts.alpha ? { meta: { alpha: true } } : {}),
+    ...(opts.derived ? { derived: opts.derived } : {}),
   });
   if (opts.words?.length) {
     const tf = await store.writeTranscript(projectId, id, opts.words);
@@ -163,14 +169,16 @@ export const analyzeAsset = async (projectId: string, assetId: string): Promise<
     await patchAsset(projectId, assetId, 'Media analyzed', (a) => {
       a.status = 'ready';
       a.kind = info.isImage ? 'image' : info.hasVideo ? 'video' : info.hasAudio ? 'audio' : a.kind;
-      a.meta = { duration: info.duration, width: info.width, height: info.height, fps: info.fps, hasAudio: info.hasAudio, hasVideo: info.hasVideo, codec: info.codec };
+      a.meta = { duration: info.duration, width: info.width, height: info.height, fps: info.fps, hasAudio: info.hasAudio, hasVideo: info.hasVideo, codec: info.codec, ...(a.meta.alpha ? { alpha: true } : {}) };
       a.thumb = thumbFile;
       a.waveform = peaksFile;
       a.filmstrip = strip;
     });
     const settings = getSettings();
     // heavy or browser-unfriendly footage gets a light editing copy in the background
-    if (info.hasVideo && !info.isImage && info.width && info.height && needsProxy({ codec: info.codec, width: info.width, height: info.height, duration: info.duration }, settings.render.proxies)) {
+    // (never for footage with transparency: a proxy would lose it)
+    const alpha = (await store.get(projectId)).assets.find((x) => x.id === assetId)?.meta.alpha;
+    if (!alpha && info.hasVideo && !info.isImage && info.width && info.height && needsProxy({ codec: info.codec, width: info.width, height: info.height, duration: info.duration }, settings.render.proxies)) {
       void ensureProxy(projectId, assetId).catch((err) => console.warn('[proxy]', (err as Error).message));
     }
     const fresh = (await store.get(projectId)).assets.find((a) => a.id === assetId);
@@ -221,7 +229,7 @@ export const ensureProxy = (projectId: string, assetId: string): Promise<void> =
   if (!job) {
     job = (async () => {
       const asset = (await store.get(projectId)).assets.find((a) => a.id === assetId);
-      if (!asset || asset.kind !== 'video' || asset.proxy || !asset.meta.width || !asset.meta.height) return;
+      if (!asset || asset.kind !== 'video' || asset.proxy || asset.meta.alpha || !asset.meta.width || !asset.meta.height) return;
       const size = proxySize(asset.meta.width, asset.meta.height);
       const file = `${assetId}.proxy.mp4`;
       await proxyQueue.add(projectId, `Proxy for ${asset.name}`, (report) =>

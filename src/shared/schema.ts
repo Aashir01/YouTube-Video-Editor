@@ -347,7 +347,7 @@ export const TrackSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const ASSET_KINDS = ['video', 'audio', 'image', 'document', 'other'] as const;
-export const ASSET_ORIGINS = ['upload', 'stock', 'generated', 'tts', 'render', 'url', 'library'] as const;
+export const ASSET_ORIGINS = ['upload', 'stock', 'generated', 'tts', 'render', 'url', 'library', 'processed'] as const;
 
 export const AssetSchema = z.object({
   id: Id,
@@ -369,6 +369,8 @@ export const AssetSchema = z.object({
       hasAudio: z.boolean().optional(),
       hasVideo: z.boolean().optional(),
       codec: z.string().optional(),
+      /** the picture has transparency (background removed) */
+      alpha: z.boolean().optional(),
     })
     .default({}),
   thumb: z.string().optional(),
@@ -378,6 +380,10 @@ export const AssetSchema = z.object({
     .optional()
     .describe('Sprite of evenly spaced frames for the timeline'),
   proxy: z.object({ file: z.string(), width: z.number(), height: z.number() }).optional().describe('Light copy for smooth editing; renders use the original'),
+  derived: z
+    .object({ from: Id, kind: z.enum(['background', 'greenscreen', 'stabilized', 'lut']), offset: z.number().describe('Where in the original this file starts (s)'), note: z.string().optional() })
+    .optional()
+    .describe('Made from another asset (background removed, stabilized, color look): the original can be restored'),
   transcript: z
     .object({
       status: z.enum(['none', 'pending', 'done', 'error']).default('none'),

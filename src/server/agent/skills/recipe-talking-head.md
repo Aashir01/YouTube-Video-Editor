@@ -10,7 +10,7 @@ description: Step-by-step recipe for editing user footage (talking head, tutoria
    **Rough cut**: `auto_cut` the main footage onto Main with `removeRanges` for bad takes/tangents and `jumpCutZoom: true`. Check the new length against the brief's target.
 4. **Hook**: if the best line is later in the video, consider a cold open (copy that segment to the start) or a `title-card`/`question` scene after the first sentence.
 5. **Zooms**: add `smooth` punch-ins (1.25–1.35×) on emphasis moments via `apply_edits` updateClip (`zooms`).
-6. **B-roll & graphics**: for each key claim/noun, add b-roll (user images/clips, stock) on the B-roll track, and graphics (lower third for the speaker's intro in the first 10–20s, charts for numbers, bullet lists for summaries). Load `motion-graphics`.
+6. **B-roll & graphics**: for each key claim/noun, add b-roll (user images/clips, stock) on the B-roll track, and graphics (to put the presenter in front of b-roll or a branded background, `remove_background` on their clip and place the background on a track below; green-screen footage uses mode "screen") (lower third for the speaker's intro in the first 10–20s, charts for numbers, bullet lists for summaries). Load `motion-graphics`.
 7. **Captions**: `add_captions` (style per format).
 8. **Audio**: music bed ducked under speech, SFX on graphics/transitions, fade out at the end.
 9. **Chapters**: `chapter-card` scenes or just metadata chapters at topic changes.

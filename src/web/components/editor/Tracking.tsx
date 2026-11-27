@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Crosshair, EyeOff, ScanFace } from 'lucide-react';
+import { Crosshair, EyeOff, Eraser, ScanFace, Undo2, UserRound } from 'lucide-react';
 import type { BlurClip, Clip, VideoClip } from '../../../shared/schema';
 import { baseVideoFor } from '../../../shared/motion';
 import { api } from '../../lib/api';
 import { useStudio } from '../../lib/store';
 import { errorText } from '../../lib/utils';
-import { NumberField, RangeField, Section, Segmented } from '../ui';
+import { NumberField, RangeField, Section, Segmented, Switch } from '../ui';
 import { useAnim } from './Keyframes';
 
 type Patch = (p: Record<string, unknown>) => void;
@@ -81,6 +81,50 @@ export const BlurEditor: React.FC<{ clip: BlurClip; patch: Patch }> = ({ clip, p
         <NumberField label="W" {...A.field('box.w')} min={0.01} max={3} step={0.01} />
         <NumberField label="H" {...A.field('box.h')} min={0.01} max={3} step={0.01} />
       </div>
+    </Section>
+  );
+};
+
+/** Remove the background of a video clip: the person (no green screen needed) or a green/blue screen. */
+export const BackgroundSection: React.FC<{ clip: VideoClip }> = ({ clip }) => {
+  const asset = useStudio((s) => s.project?.assets.find((a) => a.id === clip.assetId));
+  const { busy, run } = useToolRun();
+  const [blurBehind, setBlurBehind] = useState(false);
+  const derived = asset?.derived?.kind === 'background' || asset?.derived?.kind === 'greenscreen' ? asset.derived : null;
+  if (clip.multicam) return null;
+  return (
+    <Section title="Background" defaultOpen={Boolean(derived)}>
+      {derived ? (
+        <>
+          <p className="-mt-1 text-[11px] leading-snug text-dim">
+            {derived.kind === 'background' ? 'The background is removed' : `The screen (${derived.note ?? 'auto'}) is keyed out`}: whatever is on the tracks below shows through.
+          </p>
+          <button className="btn btn-sm" disabled={busy !== null} onClick={() => run('restore', 'remove_background', { clipId: clip.id, mode: 'restore' }, 'Restoring…', 'Original')}>
+            <Undo2 className="size-3.5" /> Restore the original
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="-mt-1 text-[11px] leading-snug text-dim">Cut the person out (no green screen needed), or key out a green or blue screen. Put an image or b-roll on a track below it, or blur the original behind.</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              className="btn btn-sm"
+              disabled={busy !== null}
+              onClick={() => run('person', 'remove_background', { clipId: clip.id, mode: 'person', behind: blurBehind ? 'blur' : 'none' }, 'Removing the background (every frame)…', 'Background removed')}
+            >
+              <UserRound className="size-3.5" /> Remove background
+            </button>
+            <button
+              className="btn btn-sm"
+              disabled={busy !== null}
+              onClick={() => run('screen', 'remove_background', { clipId: clip.id, mode: 'screen', behind: blurBehind ? 'blur' : 'none' }, 'Keying out the screen…', 'Screen removed')}
+            >
+              <Eraser className="size-3.5" /> Remove green screen
+            </button>
+          </div>
+          <Switch checked={blurBehind} onChange={setBlurBehind} label="Blurred original behind (portrait mode)" />
+        </>
+      )}
     </Section>
   );
 };

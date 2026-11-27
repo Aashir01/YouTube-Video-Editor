@@ -66,6 +66,7 @@ export const installAgentRoutes = (app: Hono): void => {
     auto_reframe: 'Tracking faces',
     blur_faces: 'Blurring faces',
     track_motion: 'Tracking motion',
+    remove_background: 'Removing the background',
   };
   app.post('/api/projects/:id/tools/:name', async (c) => {
     const id = c.req.param('id');
