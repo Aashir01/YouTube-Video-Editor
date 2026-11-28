@@ -84,6 +84,8 @@ const KeysSchema = z.object({
   pixabay: z.string().optional(),
   tavily: z.string().optional(),
   brave: z.string().optional(),
+  /** YouTube Data API key (idea radar; uploads use the connected channel) */
+  youtube: z.string().optional(),
 });
 
 const ImageSettingsSchema = z.object({
@@ -218,6 +220,7 @@ export const getSettings = (): Settings => {
   k.pixabay ||= env('PIXABAY_API_KEY');
   k.tavily ||= env('TAVILY_API_KEY');
   k.brave ||= env('BRAVE_API_KEY', 'BRAVE_SEARCH_API_KEY');
+  k.youtube ||= env('YOUTUBE_API_KEY');
   // a provider's own key doubles as the service key (e.g. OpenAI TTS/Whisper, Gemini TTS/images)
   for (const p of s.llm.providers) {
     if (!p.apiKey) continue;

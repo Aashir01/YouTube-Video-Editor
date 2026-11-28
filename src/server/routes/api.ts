@@ -33,6 +33,7 @@ import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 import { cloud } from './cloud';
 import { readAutopilot, startAutopilot, stopAutopilot } from '../autopilot';
+import { canReadYouTube, findIdeas } from '../ideas';
 
 export const api = new Hono();
 
@@ -112,6 +113,15 @@ api.post('/settings/models', async (c) => {
 api.post('/settings/test-llm', async (c) => {
   const body = (await c.req.json()) as { providerId?: string; provider?: unknown; model: string };
   return c.json(await testModel(resolveProvider(body), body.model));
+});
+
+api.post('/ideas', async (c) => {
+  const body = z
+    .object({ query: z.string().min(1).max(120), region: z.string().max(2).optional(), language: z.string().max(5).optional(), days: z.number().int().min(7).max(365).optional(), kind: z.enum(['any', 'shorts', 'long']).optional(), fresh: z.boolean().optional() })
+    .parse(await c.req.json());
+  // no key yet is an answer for the radar to explain, not a failure
+  if (!canReadYouTube()) return c.json({ needsKey: true, query: body.query, days: 0, fetchedAt: new Date().toISOString(), videos: [], patterns: null });
+  return c.json(await findIdeas(body));
 });
 
 api.get('/voices', async (c) => c.json(await listVoices(getSettings())));

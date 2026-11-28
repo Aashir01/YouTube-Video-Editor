@@ -3,6 +3,7 @@ import { askUser, delegate, loadSkill, updatePlan } from './conversation';
 import { checkTimeline, getProjectTool, getTimeline, setBrand, setBrief, setCanvas } from './project';
 import { analyzeMedia, annotateAsset, enhanceAudio, getTranscript, inspectAssets, readDocument, searchTranscript, transcribe, viewMedia } from './assets';
 import { fetchUrl, webSearchTool } from './research';
+import { findIdeasTool } from './ideas';
 import { generateVoiceover, listVoicesTool, writeScript } from './script';
 import { addCaptions, addMedia, addScene, applyEdits, autoCut } from './edit';
 import { addLibrarySound, generateAudio, generateImageTool, importStock, searchStockTool } from './generate';
@@ -48,6 +49,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   cutToBeatTool,
   webSearchTool,
   fetchUrl,
+  findIdeasTool,
   writeScript,
   listVoicesTool,
   generateVoiceover,
@@ -78,7 +80,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
 ];
 
 export const SUBAGENT_TOOLS: Record<string, string[]> = {
-  researcher: ['web_search', 'fetch_url', 'read_document', 'inspect_assets', 'get_transcript', 'search_transcript', 'get_project', 'load_skill'],
+  researcher: ['web_search', 'fetch_url', 'find_ideas', 'read_document', 'inspect_assets', 'get_transcript', 'search_transcript', 'get_project', 'load_skill'],
   scriptwriter: ['get_project', 'read_document', 'get_transcript', 'search_transcript', 'inspect_assets', 'load_skill', 'write_script', 'web_search', 'fetch_url'],
   motion_designer: ['get_project', 'get_timeline', 'list_templates', 'add_scene', 'write_code_scene', 'apply_edits', 'preview_frames', 'inspect_assets', 'view_media', 'load_skill', 'add_library_sound', 'add_media'],
   reviewer: ['get_project', 'get_timeline', 'check_timeline', 'review_retention', 'preview_frames', 'inspect_assets', 'get_transcript', 'view_media', 'load_skill'],
