@@ -21,6 +21,11 @@ describe('YouTube upload metadata', () => {
     expect(meta.status.privacyStatus).toBe('unlisted');
   });
 
+  it('credits Cutroom in the description on the free Cutroom AI plan', () => {
+    const meta = videoMetadata(project(), { privacy: 'private', madeWith: true });
+    expect(meta.snippet.description).toMatch(/\n\nEdited with Cutroom: https:\/\/github\.com\//);
+  });
+
   it('leaves localizations out when there are none', () => {
     const meta = videoMetadata(project(), { privacy: 'private' });
     expect('localizations' in meta).toBe(false);

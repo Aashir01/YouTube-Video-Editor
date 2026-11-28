@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ExternalLink, Gift, LogOut, Sparkles, Zap } from 'lucide-react';
+import { Copy, ExternalLink, Gift, LogOut, Share2, Sparkles, Zap } from 'lucide-react';
+import { PRODUCT } from '../../../shared/product';
 import { api, type CloudPlans, type CloudStatus, type CloudUsage } from '../../lib/api';
 import { useStudio } from '../../lib/store';
-import { cn, errorText } from '../../lib/utils';
+import { cn, copyText, errorText } from '../../lib/utils';
 import { Badge, Field, ProgressBar, SelectField, Spinner } from '../ui';
 
 const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className, ...rest }) => (
@@ -132,6 +133,7 @@ const Account: React.FC<{ status: CloudStatus; onChange: (s: CloudStatus) => voi
             {a.credits.bonus > 0 && <span>Gifts: {fmt(a.credits.bonus)}</span>}
             {a.credits.extra > 0 && <span>Bought: {fmt(a.credits.extra)} (never expire)</span>}
             {a.planUntil && <span>Plan until {day(a.planUntil)}</span>}
+            {a.plan === 'free' && <span>Free plan renders end with a small “Made with Cutroom” badge (Creator removes it)</span>}
           </div>
         </div>
         {status.inUse ? (
@@ -222,6 +224,49 @@ const Plans: React.FC<{ status: CloudStatus }> = ({ status }) => {
   );
 };
 
+/** Invite friends: they get extra credits, you get credits when they really use Cutroom AI and when they buy. */
+const Invite: React.FC<{ account: NonNullable<CloudStatus['account']> }> = ({ account }) => {
+  const [plans, setPlans] = useState<CloudPlans | null>(null);
+  useEffect(() => {
+    api
+      .cloudPlans()
+      .then(setPlans)
+      .catch(() => undefined);
+  }, []);
+  const r = plans?.referral;
+  const code = account.referralCode;
+  const message = `I edit my YouTube videos with ${PRODUCT.name}, an AI video editor. Sign up in Settings → Cutroom AI with my invite code ${code}${r ? ` for ${fmt(r.invitee)} extra free AI credits` : ''}: ${PRODUCT.site}`;
+  const stats = account.referrals;
+  return (
+    <Card className="grid gap-2.5" data-testid="cloud-invite">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Gift className="size-4 text-hue-pink" /> Invite friends, earn credits
+      </div>
+      {r && (
+        <p className="text-[11px] leading-relaxed text-muted">
+          Friends who join with your code get {fmt(r.invitee)} extra credits. You get {fmt(r.active)} when they start using Cutroom AI, and {fmt(r.purchase)} when they buy a plan or credits.
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <span className="rounded-lg border border-line bg-black/25 px-3 py-1.5 font-mono text-sm font-bold tracking-widest" data-testid="invite-code">
+          {code}
+        </span>
+        <button className="btn btn-sm" onClick={() => void copyText(message).then(() => toast.success('Invite message copied'))}>
+          <Copy className="size-3.5" /> Copy invite
+        </button>
+        <a className="btn btn-sm" href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">
+          <Share2 className="size-3.5" /> WhatsApp
+        </a>
+      </div>
+      {stats && (
+        <div className="text-[11px] text-dim" data-testid="invite-stats">
+          {fmt(stats.invited)} joined · {fmt(stats.active)} using it · {fmt(stats.earned)} credits earned
+        </div>
+      )}
+    </Card>
+  );
+};
+
 export const CloudSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   const status = useStudio((s) => s.cloud);
   const setCloud = useStudio((s) => s.setCloud);
@@ -257,11 +302,7 @@ export const CloudSection: React.FC<{ onChanged: () => void }> = ({ onChanged })
       </div>
       {!status ? <Spinner className="text-dim" /> : status.signedIn ? <Account status={status} onChange={update} /> : <SignIn status={status} onDone={update} />}
       {status && <Plans status={status} />}
-      {status?.signedIn && status.account?.referralCode && (
-        <div className="flex items-center gap-2 text-[11px] text-dim">
-          <Gift className="size-3.5 text-hue-pink" /> Your invite code: <span className="font-mono font-semibold text-muted">{status.account.referralCode}</span>
-        </div>
-      )}
+      {status?.signedIn && status.account?.referralCode && <Invite account={status.account} />}
       <details className="text-xs text-dim">
         <summary className="cursor-pointer select-none">Advanced</summary>
         <Field className="mt-2" label="Cutroom Cloud server" hint="Only change this if you run your own Cutroom Cloud.">

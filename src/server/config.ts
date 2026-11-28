@@ -124,9 +124,14 @@ const CloudSettingsSchema = z.object({
   url: z.string().default(''),
   token: z.string().default(''),
   email: z.string().default(''),
+  /** the plan as of the last account check ('' when unknown) */
+  plan: z.string().default(''),
   /** the catalog as of the last sign-in or account check */
   models: z.array(z.object({ id: z.string(), name: z.string(), tier: z.string().default('standard'), vision: z.boolean().default(false), note: z.string().default('') })).default([]),
 });
+
+/** Renders and uploads made on the free Cutroom AI plan carry a small "Made with Cutroom" (Creator removes it). */
+export const madeWithCutroom = (s: Settings = getSettings()) => Boolean(s.cloud.token && s.cloud.plan === 'free');
 
 export const cloudUrl = (s: Settings) => (s.cloud.url || process.env.CUTROOM_CLOUD_URL || DEFAULT_CLOUD_URL).replace(/\/+$/, '');
 

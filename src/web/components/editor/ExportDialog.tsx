@@ -89,6 +89,7 @@ const RenderRow: React.FC<{ r: RenderRecord }> = ({ r }) => {
 
 const RenderSection: React.FC = () => {
   const project = useStudio((s) => s.project!);
+  const freePlan = useStudio((s) => Boolean(s.cloud?.signedIn && s.cloud.account?.plan === 'free'));
   const range = useStudio((s) => s.range);
   const [preset, setPreset] = useState('standard');
   const [output, setOutput] = useState<'video' | 'audio'>('video');
@@ -151,6 +152,14 @@ const RenderSection: React.FC = () => {
         {output === 'video' ? 'H.264 MP4 with AAC audio' : 'MP3 audio'}
         {project.audio.normalize ? `, loudness-normalized to ${project.audio.loudnessTarget} LUFS` : ''}, plus an SRT caption file. Rendering runs locally with all your CPU cores.
       </p>
+      {output === 'video' && freePlan && (
+        <p className="-mt-1 text-[11px] leading-snug text-dim" data-testid="made-with-note">
+          Free Cutroom AI plan: the video ends with a small “Made with Cutroom” badge.{' '}
+          <button className="font-semibold text-accent-2-ink hover:underline" onClick={() => useStudio.getState().openSettings('cloud')}>
+            Creator removes it
+          </button>
+        </p>
+      )}
       {latest?.file && (latest.kind === 'audio' ? <audio src={renderUrl(project.id, latest.file)} controls className="w-full" /> : <video src={renderUrl(project.id, latest.file)} controls className="w-full rounded-lg border border-line bg-black" style={{ maxHeight: 260 }} />)}
       <div className="flex flex-col gap-2">
         {renders.map((r) => (

@@ -59,6 +59,18 @@ A small VPS is plenty to start with: Cloud only relays requests and writes small
 
 All of these numbers are settings in `.env.cloud`.
 
+### Invites and the badge (the growth loop)
+
+- **Invites:** every account has an invite code, shown in Settings → Cutroom AI with **Copy invite** and **WhatsApp** buttons.
+  - **The friend** gets 100 extra credits for joining with it.
+  - **The inviter** gets 300 credits once the friend has really used Cutroom AI (100 credits of requests), so made-up accounts earn nothing. This reward is capped at 10 a month.
+  - **On the friend's first purchase,** the inviter gets 1,000 more.
+  - **Where it goes:** rewards land in the gift bucket. The amounts are set by the `REFERRAL_*` variables.
+- **The badge:** renders made while signed in on the **Free** plan end with a small "Made with Cutroom" badge for the last 3.5 seconds. YouTube uploads from the app add a line to the description: "Edited with Cutroom" and a link.
+  - **Creator** removes both; the Export dialog says so.
+  - **Not signed in:** people using their own keys, or no AI at all, never get the badge.
+  - **Link:** the address is `PRODUCT.site` in `src/shared/product.ts`.
+
 ### Will $3 cover a creator's month?
 
 The target is about 10 videos, 10 Shorts and 3 long videos a month on Creator (2,000 credits).

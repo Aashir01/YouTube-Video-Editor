@@ -72,7 +72,7 @@ const useCloud = (s: Settings, main = 'auto', fast = 'auto-fast'): Settings => (
 const signedOut = (s: Settings): Settings => {
   const own = s.llm.providers.find((p) => p.id !== CLOUD_PROVIDER_ID && p.apiKey && p.models.length);
   const back = (ref: Settings['llm']['main'], i: number) => (ref?.providerId !== CLOUD_PROVIDER_ID ? ref : own ? { providerId: own.id, model: own.models[Math.min(i, own.models.length - 1)]! } : undefined);
-  return { ...s, cloud: { ...s.cloud, token: '' }, llm: { ...s.llm, main: back(s.llm.main, 0), fast: back(s.llm.fast, 1) } };
+  return { ...s, cloud: { ...s.cloud, token: '', plan: '' }, llm: { ...s.llm, main: back(s.llm.main, 0), fast: back(s.llm.fast, 1) } };
 };
 
 const status = async () => {
@@ -81,6 +81,10 @@ const status = async () => {
   if (!s.cloud.token) return { ...base, signedIn: false as const };
   try {
     const account = await call<Record<string, unknown>>('/account', { token: s.cloud.token });
+    // remember the plan for renders and uploads (no network needed there)
+    const plan = String(account.plan ?? '');
+    const fresh = getSavedSettings();
+    if (fresh.cloud.token && fresh.cloud.plan !== plan) saveSettings({ ...fresh, cloud: { ...fresh.cloud, plan } });
     return { ...base, signedIn: true as const, account };
   } catch (err) {
     if (err instanceof CloudCallError && err.status === 401) {
@@ -107,7 +111,7 @@ const signIn = (kind: 'signup' | 'login') => async (c: Context) => {
     const eff = getSettings();
     const hasOther = Boolean(eff.llm.main && eff.llm.main.providerId !== CLOUD_PROVIDER_ID && eff.llm.providers.some((p) => p.id === eff.llm.main!.providerId));
     let s = getSavedSettings();
-    s = { ...s, cloud: { ...s.cloud, token: r.token, email: r.account.email, models } };
+    s = { ...s, cloud: { ...s.cloud, token: r.token, email: r.account.email, plan: String((r.account as { plan?: string }).plan ?? ''), models } };
     if (body.use ?? !hasOther) s = useCloud(s);
     saveSettings(s);
     return c.json(await status());

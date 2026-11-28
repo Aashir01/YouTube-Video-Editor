@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import type { Project } from '../../shared/schema';
-import { getSavedSettings, getSettings, saveSettings } from '../config';
+import { getSavedSettings, getSettings, madeWithCutroom, saveSettings } from '../config';
+import { PRODUCT } from '../../shared/product';
 
 /**
  * YouTube Data API v3 publishing (OAuth "installed app" flow with a loopback
@@ -122,7 +123,7 @@ const descriptionWithChapters = (p: Project): string => {
 };
 
 /** The videos.insert body: snippet, status and (when there are any) the title and description in other languages. */
-export const videoMetadata = (project: Project, opts: Pick<UploadOptions, 'privacy' | 'publishAt' | 'localizations'>) => {
+export const videoMetadata = (project: Project, opts: Pick<UploadOptions, 'privacy' | 'publishAt' | 'localizations'> & { madeWith?: boolean }) => {
   const hashtags = project.youtube.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ');
   const localizations = Object.fromEntries(
     Object.entries(opts.localizations ?? {}).map(([lang, l]) => [lang, { title: l.title.slice(0, 100), description: [l.description, hashtags].filter(Boolean).join('\n\n').slice(0, 5000) }]),
@@ -131,7 +132,7 @@ export const videoMetadata = (project: Project, opts: Pick<UploadOptions, 'priva
   return {
     snippet: {
       title: (project.youtube.title || project.name).slice(0, 100),
-      description: [descriptionWithChapters(project), hashtags].filter(Boolean).join('\n\n').slice(0, 5000),
+      description: [descriptionWithChapters(project), hashtags, opts.madeWith ? `Edited with ${PRODUCT.name}: ${PRODUCT.site}` : ''].filter(Boolean).join('\n\n').slice(0, 5000),
       tags: project.youtube.tags.slice(0, 30),
       categoryId: project.youtube.category || '27',
       // YouTube needs the original language to accept localizations
@@ -145,7 +146,7 @@ export const videoMetadata = (project: Project, opts: Pick<UploadOptions, 'priva
 export const uploadVideo = async (project: Project, opts: UploadOptions): Promise<{ videoId: string; url: string; warnings: string[] }> => {
   const token = await accessToken();
   const size = (await fsp.stat(opts.videoFile)).size;
-  const meta = videoMetadata(project, opts);
+  const meta = videoMetadata(project, { ...opts, madeWith: madeWithCutroom() });
   const parts = `snippet,status${'localizations' in meta ? ',localizations' : ''}`;
   const init = await fetch(`${API()}/upload/youtube/v3/videos?uploadType=resumable&part=${parts}`, {
     method: 'POST',
