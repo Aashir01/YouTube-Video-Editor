@@ -188,6 +188,7 @@ export const buildCommands = (): Command[] => {
     { id: 'p-media', group: 'Panels', title: 'Media', icon: Film, run: panel('media') },
     { id: 'p-text', group: 'Panels', title: 'Transcript (text editing)', icon: TextQuote, run: panel('transcript') },
     { id: 'p-shorts', group: 'Panels', title: 'Find Shorts (best moments)', icon: Smartphone, run: panel('shorts'), keywords: 'highlights clips viral repurpose vertical moments' },
+    { id: 'p-coach', group: 'Panels', title: 'Retention coach (hook score, dead spots)', icon: Gauge, run: panel('coach'), keywords: 'retention hook pacing pauses boring watch time audience analyze' },
     { id: 'beat-cut', group: 'Edit', title: 'Cut the selected clips to the beat', icon: Music, run: () => void cutToBeat(st().selection), when: hasSel, keywords: 'music rhythm sync b-roll montage tempo' },
     { id: 'multicam', group: 'Edit', title: 'Multicam: sync cameras by sound', icon: SwitchCamera, run: () => useStudio.setState({ multicamOpen: true }), keywords: 'podcast interview angles cameras switch sync audio' },
     { id: 'p-graphics', group: 'Panels', title: 'Graphics & templates', icon: Sparkles, run: panel('graphics') },
