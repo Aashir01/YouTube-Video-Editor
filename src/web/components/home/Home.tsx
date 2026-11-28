@@ -35,6 +35,7 @@ import { navigate } from '../../lib/nav';
 import { cn, errorText, formatClock, timeAgo } from '../../lib/utils';
 import { Logo } from '../icons';
 import { CreditMeter } from '../CreditMeter';
+import { IdeaRadar } from './IdeaRadar';
 import { Empty, IconBtn, Menu, Segmented, SelectField, Spinner } from '../ui';
 import { prefs } from '../../lib/prefs';
 
@@ -273,6 +274,15 @@ export const Home: React.FC = () => {
             ))}
           </div>
         </section>
+
+        <IdeaRadar
+          onUse={(brief) => {
+            setTopic(brief);
+            // the page scrolls inside its own container: bring the prompt box into view
+            promptBox.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => promptBox.current?.focus({ preventScroll: true }), 350);
+          }}
+        />
 
         <section>
           <div className="mb-4 flex items-center justify-between">

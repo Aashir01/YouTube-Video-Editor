@@ -11,6 +11,22 @@ fs.mkdirSync(path.dirname(LOG), { recursive: true });
 const log = (...a) => fs.appendFileSync(LOG, a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n');
 
 let callSeq = 0;
+
+// a niche for the idea radar: channels with very different averages, and videos above and below them
+const IDEA_CHANNELS = {
+  big: { title: 'Big Tech', stats: { viewCount: '50000000', videoCount: '500', subscriberCount: '1000000' } },
+  small: { title: 'Small Creator', stats: { viewCount: '200000', videoCount: '100', subscriberCount: '5000' } },
+  mid: { title: 'Mid Channel', stats: { viewCount: '5000000', videoCount: '250', subscriberCount: '80000' } },
+};
+const daysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString();
+const IDEA_VIDEOS = [
+  { id: 'vidStudio', channel: 'big', title: 'My studio tour', views: 90000, duration: 'PT20M', published: daysAgo(20) },
+  { id: 'vidBest', channel: 'big', title: 'Best AI tools for 2026', views: 500000, duration: 'PT12M', published: daysAgo(30) },
+  { id: 'vid1000', channel: 'small', title: 'How I made $1000 with AI tools in 7 days', views: 300000, duration: 'PT8M12S', published: daysAgo(10) },
+  { id: 'vidNobody', channel: 'mid', title: 'AI tools nobody talks about?', views: 400000, duration: 'PT45S', published: daysAgo(5) },
+  { id: 'vidHonest', channel: 'mid', title: 'Make money with AI tools: the honest truth', views: 160000, duration: 'PT15M', published: daysAgo(40) },
+  { id: 'vidMic', channel: 'small', title: 'Unboxing my new mic', views: 3000, duration: 'PT58S', published: daysAgo(15) },
+];
 let ytSeq = 0;
 const ytSessions = new Map();
 const chunk = (delta, finish = null) => ({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'fake-director', choices: [{ index: 0, delta, finish_reason: finish }] });
@@ -179,6 +195,23 @@ http
         if (req.url.startsWith('/upload/youtube/v3/thumbnails')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end('{}');
+        }
+        // the YouTube Data API reads the idea radar makes
+        if (req.method === 'GET' && req.url.startsWith('/youtube/v3/')) {
+          const u = new URL(req.url, 'http://x');
+          const what = u.pathname.split('/').pop();
+          fs.appendFileSync(LOG, `YTAPI ${JSON.stringify({ what, params: Object.fromEntries(u.searchParams), auth: req.headers.authorization ?? null })}\n`);
+          const ids = (u.searchParams.get('id') ?? '').split(',');
+          const body =
+            what === 'search'
+              ? { items: IDEA_VIDEOS.map((v) => ({ id: { videoId: v.id } })) }
+              : what === 'videos'
+                ? { items: IDEA_VIDEOS.filter((v) => ids.includes(v.id)).map((v) => ({ id: v.id, snippet: { title: v.title, channelId: v.channel, channelTitle: IDEA_CHANNELS[v.channel].title, publishedAt: v.published, thumbnails: { medium: { url: '' } } }, statistics: { viewCount: String(v.views), likeCount: '10', commentCount: '2' }, contentDetails: { duration: v.duration } })) }
+                : what === 'channels'
+                  ? { items: ids.filter((id) => IDEA_CHANNELS[id]).map((id) => ({ id, statistics: IDEA_CHANNELS[id].stats })) }
+                  : { items: [{ snippet: { title: 'Test Channel' } }] };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify(body));
         }
         if (req.method === 'GET' && req.url.endsWith('/models')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -62,6 +62,7 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 - **Enhance speech** in one click: rumble and hiss removal, denoise, compression and loudness leveling, without re-encoding the video.
 - **Command palette** (`Ctrl/⌘+K`): run any command, jump to a time (`1:23`), find a clip by its text, or ask the Director. `?` lists every shortcut. There's also an undo-history menu, a save indicator and `/` quick briefs in the chat.
 - **Long video → Shorts.** Mark a range or select words in the transcript, then click **Make a Short**. You get a new 9:16 project with the footage reframed on the speaker's face, graphics kept in sync, music trimmed to length and captions added. The Director can do the same.
+- **Idea radar.** On the home screen, search your niche (by country and language, e.g. Pakistan and Urdu). It lists the recent videos that beat their own channel's average by the most. A 150× hit on a small channel tells you more about what people want than a big channel's usual views. It also shows what the outlier titles share. **Use this idea** turns one into a brief for your own take, not a copy. The Director can search too (`find_ideas`). It needs a free YouTube Data API key (Settings → Media & search keys) or your connected channel; results are cached for a day to save quota.
 - **Retention coach.** The **Coach** tab scores your hook and shows where viewers would leave. It works from the edit as it is now: instant, free, and no AI needed.
   - **The hook:** does the video talk from the first second and open on a hook line, at a brisk pace? Does something change on screen, and are there words to read (captions on Shorts)?
   - **Dead spots:** long pauses, the same shot held too long, filler words, slow stretches, silence at the end, and no next step for the viewer.
@@ -94,7 +95,7 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 | Composition & rendering | [Remotion](https://www.remotion.dev) 4 (React → video), FFmpeg, keyframe animation |
 | Vision & audio | Local face detection with landmarks (YuNet) and person segmentation (MediaPipe) on ONNX Runtime, talking detection and template-matching object tracking; sync by sound (FFT cross-correlation) and beat tracking, all in-process |
 | Server | Node 20+, Hono, Server-Sent Events, Zod-validated project document |
-| Agent | Custom tool-calling loop (Claude-Code-style): 55 tools, skills, sub-agents, context compaction |
+| Agent | Custom tool-calling loop (Claude-Code-style): 56 tools, skills, sub-agents, context compaction |
 | LLM adapters | Native Anthropic, OpenAI-compatible and Gemini adapters (streaming, tool calls, vision) |
 | UI | React 19, Vite, Tailwind CSS 4, Zustand, Radix |
 | Integrations | MCP server (Streamable HTTP + stdio), MCP client, YouTube Data API |
@@ -237,7 +238,7 @@ You can drag media, templates and sounds from the left panel (or files from your
 
 ## Use it from Claude Code, Claude Desktop or Cursor (MCP)
 
-Cutroom is an MCP server with **56 tools**: the Director's 52 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
+Cutroom is an MCP server with **57 tools**: the Director's 53 non-chat tools plus `list_projects`, `create_project`, `select_project` and `import_file`. It also provides two prompts, `produce_video` and `edit_footage`. Everything an MCP client does shows up live in the open editor.
 
 **Claude Code** (while the studio is running):
 
@@ -346,7 +347,7 @@ bin/director.mjs        CLI
 src/shared/             project schema, timeline operations, templates catalog (used by server, UI and renderer)
 src/remotion/           the video composition: clips, effects, 28 templates, captions, code scenes, thumbnails
 src/server/             HTTP API, storage, media pipeline, rendering, services, agent, MCP
-src/server/agent/       Director loop, prompts, skills (Markdown), 55 tools
+src/server/agent/       Director loop, prompts, skills (Markdown), 56 tools
 src/web/                the editor UI
 src/cloud/              Cutroom Cloud: accounts, credit ledger, model catalog, the AI gateway
 assets/models/          bundled ONNX models (face detection; person segmentation for background removal)

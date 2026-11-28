@@ -70,6 +70,24 @@ export const disconnect = () => {
   saveSettings({ ...saved, youtube: { ...saved.youtube, refreshToken: '', channelTitle: '' } });
 };
 
+/**
+ * GET from the YouTube Data API: with a Data API key (Settings → Media & search keys, or
+ * YOUTUBE_API_KEY) when there is one, otherwise as the connected channel.
+ */
+export const youtubeApiGet = async <T>(resource: string, params: Record<string, string | number | undefined>): Promise<T> => {
+  const key = getSettings().keys.youtube;
+  if (!key && !getSettings().youtube.refreshToken) throw new Error('Add a YouTube Data API key (Settings → Media & search keys) or connect your channel (Settings → YouTube) first.');
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+  if (key) q.set('key', key);
+  const res = await fetch(`${API()}/youtube/v3/${resource}?${q}`, { headers: key ? {} : { Authorization: `Bearer ${await accessToken()}` } });
+  const j = (await res.json().catch(() => ({}))) as T & { error?: { message?: string; errors?: { reason?: string }[] } };
+  if (!res.ok) {
+    const reason = j.error?.errors?.[0]?.reason;
+    throw new Error(reason === 'quotaExceeded' ? 'The YouTube API quota for today is used up (it resets at midnight Pacific time)' : `YouTube API: ${j.error?.message ?? res.status}`);
+  }
+  return j;
+};
+
 const accessToken = async (): Promise<string> => {
   const s = getSettings().youtube;
   if (!s.refreshToken) throw new Error('YouTube is not connected. Connect your channel in Settings → YouTube.');

@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 55 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 56 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -135,14 +135,14 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 55 in total):
+- **Tools** (`tools/`, 56 in total):
 
   | Category | Tools |
   |---|---|
   | Conversation | `ask_user`, `update_plan`, `load_skill`, `delegate` |
   | Project | `get_project`, `get_timeline`, `set_brief`, `set_brand`, `set_canvas` |
   | Media | `inspect_assets`, `analyze_media`, `view_media`, `transcribe`, `get_transcript`, `search_transcript`, `read_document`, `annotate_asset`, `enhance_audio` |
-  | Research | `web_search`, `fetch_url` |
+  | Research | `web_search`, `fetch_url`, `find_ideas` |
   | Script | `write_script`, `list_voices` |
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
   | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion`, `create_multicam`, `remove_background`, `stabilize_video`, `apply_lut`, `cut_to_beat` |
@@ -203,6 +203,15 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 2. The AI answers with sentence numbers (JSON, read forgivingly: code fences, prose, trailing commas), so every moment starts and ends exactly on a sentence.
 3. Picks are snapped with a little air (never into the neighboring sentence), trimmed or extended by whole sentences to the length limits, and overlaps go to the better score.
 4. The list is saved in `moments.json` with a fingerprint of the words: the tab (and the server, which refuses stale times) knows when the edit has changed since. Making a Short reuses `createShort` and remembers the new project.
+
+### Idea radar
+
+`src/server/ideas.ts` and `src/shared/ideas.ts` (the home screen, `find_ideas`):
+
+1. **Search:** one YouTube Data API search for the niche (most viewed, last 90 days, optional country, language and length; 100 quota units), then batched `videos` and `channels` lookups (1 unit each). It uses a Data API key or the connected channel.
+2. **Outlier factor:** a video's views ÷ its channel's average views per video, with a floor of 1,000 so tiny channels don't produce noise. It is a better signal than raw views, which favor big channels.
+3. **Title patterns:** the outliers (2× and up) are scanned for shared words and two-word phrases. The radar also reports title length and the share of titles with numbers or questions, and the share of Shorts.
+4. **Cache and briefs:** results are cached in `cache/ideas-*.json` for a day. "Use this idea" writes a brief for an original take into the home prompt.
 
 ### Retention coach
 
@@ -336,6 +345,11 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - **The scripted model** also finds Shorts, translates subtitles, and speaks for dubbed versions (the runner points OpenAI voices at it with `OPENAI_BASE_URL`).
   - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames: faces are re-detected on renders to check reframing and blur, pixel colors show which camera is on or what shows through a removed background, and shake is measured with the app's own tracker. Any browser console error fails a suite.
 
+- **Idea radar** (`ideas` suite): the scripted server also answers YouTube Data API reads. The suite checks:
+  - the prompt for a key;
+  - the ranking by outlier factor (a small channel's 150× above a big channel's 5×);
+  - the shared phrases, the country filter and the cache;
+  - the Shorts filter, the brief, and the Director's tool.
 - **Retention coach** (`coach` suite): a talk with a slow, flat opening, a long pause, a filler and a silent ending gets fixed click by click from the Coach tab. The hook and retention scores go up, one Ctrl+Z undoes a fix, the Director's tool applies fixes, and a weak hook line goes to the Director.
 - **Shorts autopilot** (`autopilot` suite): the scripted model also stands in for YouTube (OAuth token, resumable upload, captions).
   - **A scheduled run:** two found Shorts are made, rendered and uploaded as private, one a day from the chosen time, best first, with titles, hooks and captions.

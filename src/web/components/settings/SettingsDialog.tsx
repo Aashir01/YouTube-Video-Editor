@@ -386,6 +386,7 @@ const KEY_ROWS: { key: string; label: string; hint: string; url: string }[] = [
   { key: 'pixabay', label: 'Pixabay', hint: 'Free stock videos & photos.', url: 'https://pixabay.com/api/docs/' },
   { key: 'tavily', label: 'Tavily', hint: 'Web research (best quality). DuckDuckGo is used without a key.', url: 'https://app.tavily.com' },
   { key: 'brave', label: 'Brave Search', hint: 'Web research alternative.', url: 'https://brave.com/search/api/' },
+  { key: 'youtube', label: 'YouTube Data API', hint: 'Idea radar (outlier videos in your niche). Free: enable “YouTube Data API v3” in Google Cloud and create an API key. A connected channel works too.', url: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com' },
 ];
 
 const MediaSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ s, set }) => (

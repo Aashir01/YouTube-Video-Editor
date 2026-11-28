@@ -3,6 +3,7 @@ import type { EditOp } from '../../shared/ops';
 import type { AnswerItem, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
 import type { AutopilotState } from '../../shared/autopilot';
+import type { IdeasResult } from '../../shared/ideas';
 import type { TranslationsState } from '../../shared/subtitles';
 
 export interface ProjectSummary {
@@ -157,6 +158,7 @@ export interface OpsResult {
 
 export const api = {
   system: () => get<SystemInfo>('/api/system'),
+  ideas: (body: { query: string; region?: string; language?: string; days?: number; kind?: 'any' | 'shorts' | 'long'; fresh?: boolean }) => send<IdeasResult>('POST', '/api/ideas', body),
   cloud: () => get<CloudStatus>('/api/cloud'),
   cloudSignIn: (kind: 'signup' | 'login', body: { email: string; password: string; name?: string; referral?: string; use?: boolean }) => send<CloudStatus>('POST', `/api/cloud/${kind}`, body),
   cloudLogout: () => send<CloudStatus>('POST', '/api/cloud/logout'),
