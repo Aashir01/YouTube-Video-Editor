@@ -16,7 +16,7 @@ import { serveFile, receiveUploads } from '../http/files';
 import { attachSubtitles, analyzeAsset, downloadToProject, ensureFilmstrip, ensureProxy, queueTranscription, registerAsset, removeProxy } from '../media/ingest';
 import { ffInfo } from '../media/ffmpeg';
 import { libraryFile, listLibrary } from '../media/sfx';
-import { cancelRender, renderFrames, renderThumbnail, startRender, RENDER_PRESETS, type RenderPreset } from '../render/render';
+import { cancelRender, renderFrames, renderThumbnail, rendersRunning, startRender, RENDER_PRESETS, type RenderPreset } from '../render/render';
 import { resolveBrowserExecutable } from '../render/browser';
 import { localWhisperAvailable, pickTranscriptionEngine } from '../services/transcribe';
 import { listModels, testModel } from '../ai/llm';
@@ -32,6 +32,10 @@ import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 import { cloud } from './cloud';
+import { HOSTED, assertStorage, storageInfo } from '../hosted';
+import { agentsBusy } from '../agent/session';
+import { jobsRunning } from '../jobs';
+import { autopilotsRunning } from '../autopilot';
 import { readAutopilot, startAutopilot, stopAutopilot } from '../autopilot';
 import { canReadYouTube, findIdeas } from '../ideas';
 
@@ -53,6 +57,12 @@ api.onError((err, c) => {
 
 api.get('/health', (c) => c.json({ ok: true, name: 'Cutroom', time: new Date().toISOString() }));
 
+/** For the web hub: is anything running that stopping this app would cut short? */
+api.get('/hosted/status', async (c) => {
+  const busy = { renders: rendersRunning(), jobs: jobsRunning(), agents: agentsBusy(), autopilots: autopilotsRunning() };
+  return c.json({ hosted: HOSTED, busy: Object.values(busy).some((n) => n > 0), ...busy, storage: await storageInfo() });
+});
+
 api.get('/system', async (c) => {
   const s = getSettings();
   const [stt, tts] = await Promise.all([pickTranscriptionEngine(s), pickTtsEngine(s)]);
@@ -72,8 +82,10 @@ api.get('/system', async (c) => {
     tts: tts ? tts.label : null,
     llm: s.llm.main ?? null,
     providers: s.llm.providers.map((p) => ({ id: p.id, name: p.name, type: p.type, hasKey: Boolean(p.apiKey) || (p.baseUrl ?? '').includes('localhost') })),
-    dataDir: DATA_DIR,
-    appRoot: APP_ROOT,
+    // the website hides server paths
+    dataDir: HOSTED ? '' : DATA_DIR,
+    appRoot: HOSTED ? '' : APP_ROOT,
+    hosted: HOSTED,
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
   });
@@ -87,6 +99,11 @@ api.get('/settings', (c) => c.json({ saved: maskedSettings(getSavedSettings()), 
 
 api.put('/settings', async (c) => {
   const body = (await c.req.json()) as Partial<Settings>;
+  if (HOSTED) {
+    // on the website: no external MCP servers (they start programs) and no custom browser
+    delete body.mcpServers;
+    if (body.render) body.render = { ...body.render, browserExecutable: '' };
+  }
   const next = saveSettings(mergeSettingsUpdate(getSavedSettings(), body));
   if (body.mcpServers) void mcpManager.sync();
   return c.json({ saved: maskedSettings(next), effective: maskedSettings(getSettings()) });
@@ -335,6 +352,7 @@ api.get('/projects/:id/events', (c) => {
 api.post('/projects/:id/assets', async (c) => {
   const id = c.req.param('id');
   if (!store.exists(id)) throw new Error('Project not found');
+  await assertStorage(Number(c.req.header('content-length')) || 0);
   const { files } = await receiveUploads(c, store.mediaDir(id));
   const assets = [];
   for (const f of files) assets.push(await registerAsset(id, { sourcePath: f.tmpPath, originalName: f.filename, origin: 'upload', updateSource: 'user', label: `Upload ${f.filename}` }));

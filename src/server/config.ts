@@ -6,16 +6,19 @@ export const APP_ROOT = path.resolve(import.meta.dirname, '..', '..');
 export const DATA_DIR = path.resolve(process.env.DIRECTOR_DATA_DIR ?? path.join(APP_ROOT, 'data'));
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 export const CACHE_DIR = path.join(DATA_DIR, 'cache');
+/** Caches every user's app can share on a web server (render bundle, AI models); the user's own cache otherwise. */
+export const SHARED_CACHE_DIR = path.resolve(process.env.CUTROOM_SHARED_CACHE || CACHE_DIR);
 export const LIBRARY_DIR = path.join(DATA_DIR, 'library');
 export const USER_SKILLS_DIR = path.join(DATA_DIR, 'skills');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
-for (const dir of [DATA_DIR, PROJECTS_DIR, CACHE_DIR, LIBRARY_DIR, USER_SKILLS_DIR]) fs.mkdirSync(dir, { recursive: true });
+for (const dir of [DATA_DIR, PROJECTS_DIR, CACHE_DIR, SHARED_CACHE_DIR, LIBRARY_DIR, USER_SKILLS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
-// Load a local .env if present (Node >= 20.12 has a built-in parser).
+// Load a local .env if present (Node >= 20.12 has a built-in parser). Not on the website: a key
+// there would become every user's, unmetered.
 try {
   const envFile = path.join(APP_ROOT, '.env');
-  if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
+  if (fs.existsSync(envFile) && !/^(1|true|yes)$/i.test(process.env.CUTROOM_HOSTED ?? '')) process.loadEnvFile(envFile);
 } catch {
   /* ignore malformed .env */
 }

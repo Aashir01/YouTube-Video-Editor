@@ -83,9 +83,11 @@ const status = async () => {
     const account = await call<Record<string, unknown>>('/account', { token: s.cloud.token });
     // remember the plan for renders and uploads (no network needed there)
     const plan = String(account.plan ?? '');
+    // signed in by the website (or an older version): fetch the model list once
+    const models = s.cloud.models.length ? null : await fetchModels().catch(() => null);
     const fresh = getSavedSettings();
-    if (fresh.cloud.token && fresh.cloud.plan !== plan) saveSettings({ ...fresh, cloud: { ...fresh.cloud, plan } });
-    return { ...base, signedIn: true as const, account };
+    if (fresh.cloud.token && (fresh.cloud.plan !== plan || models?.length)) saveSettings({ ...fresh, cloud: { ...fresh.cloud, plan, ...(models?.length ? { models } : {}) } });
+    return { ...base, ...(models?.length ? { models } : {}), signedIn: true as const, account };
   } catch (err) {
     if (err instanceof CloudCallError && err.status === 401) {
       // revoked or expired: sign out here too

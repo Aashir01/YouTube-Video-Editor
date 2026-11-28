@@ -7,6 +7,10 @@ interface QueuedJob {
   run: () => Promise<void>;
 }
 
+let running = 0;
+/** Jobs running right now, in every queue (the web hub keeps a busy app running). */
+export const jobsRunning = () => running;
+
 /** Small concurrency-limited queue whose progress is streamed to the editor. */
 export class JobQueue {
   private active = 0;
@@ -19,6 +23,7 @@ export class JobQueue {
     return new Promise<T>((resolve, reject) => {
       const run = async () => {
         this.active++;
+        running++;
         const report: Report = (progress, detail) => bus.emit(projectId, { type: 'job', id, label, status: 'running', progress, detail });
         report(0);
         try {
@@ -30,6 +35,7 @@ export class JobQueue {
           reject(err);
         } finally {
           this.active--;
+          running--;
           this.next();
         }
       };

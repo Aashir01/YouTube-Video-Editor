@@ -36,6 +36,8 @@ export interface SystemInfo {
   providers: { id: string; name: string; type: string; hasKey: boolean }[];
   dataDir: string;
   appRoot: string;
+  /** running on the Cutroom website (no MCP, website sign-in) */
+  hosted?: boolean;
   node: string;
   platform: string;
 }
@@ -162,6 +164,7 @@ export const api = {
   system: () => get<SystemInfo>('/api/system'),
   ideas: (body: { query: string; region?: string; language?: string; days?: number; kind?: 'any' | 'shorts' | 'long'; fresh?: boolean }) => send<IdeasResult>('POST', '/api/ideas', body),
   cloud: () => get<CloudStatus>('/api/cloud'),
+  hostedStatus: () => get<{ hosted: boolean; busy: boolean; storage: { usedMb: number; limitMb: number | null } }>('/api/hosted/status'),
   cloudSignIn: (kind: 'signup' | 'login', body: { email: string; password: string; name?: string; referral?: string; use?: boolean }) => send<CloudStatus>('POST', `/api/cloud/${kind}`, body),
   cloudLogout: () => send<CloudStatus>('POST', '/api/cloud/logout'),
   cloudUse: (body: { main?: string; fast?: string } = {}) => send<CloudStatus>('POST', '/api/cloud/use', body),

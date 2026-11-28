@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
-const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies', 'coach', 'autopilot', 'ideas', 'cloud'];
+const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies', 'coach', 'autopilot', 'ideas', 'cloud', 'hosted'];
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const picked = args.filter((a) => !a.startsWith('--'));
@@ -63,7 +63,8 @@ fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
 // 3) the scripted model, Cutroom Cloud (accounts and credits, billing the scripted model) and the app
-const [port, llmPort, cloudPort] = [await freePort(), await freePort(), await freePort()];
+const [port, llmPort, cloudPort, hubPort] = [await freePort(), await freePort(), await freePort(), await freePort()];
+const hubBase = `http://127.0.0.1:${hubPort}`;
 const cloudBase = `http://127.0.0.1:${cloudPort}`;
 const ADMIN = 'e2e-admin-token';
 const base = `http://127.0.0.1:${port}`;
@@ -74,10 +75,18 @@ children.push(llm);
 const cloudLog = fs.openSync(path.join(out, 'cloud.log'), 'a');
 const cloud = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--import', 'tsx', path.join(root, 'src', 'cloud', 'main.ts')], {
   cwd: root,
-  env: { ...process.env, CLOUD_PORT: String(cloudPort), CLOUD_HOST: '127.0.0.1', CLOUD_DB: path.join(data, 'cloud', 'cloud.db'), OPENROUTER_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, OPENROUTER_API_KEY: 'fake-upstream-key', ADMIN_TOKEN: ADMIN, CONTACT_URL: 'https://example.com/top-up' },
+  env: { ...process.env, CLOUD_PORT: String(cloudPort), CLOUD_HOST: '127.0.0.1', CLOUD_DB: path.join(data, 'cloud', 'cloud.db'), OPENROUTER_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, OPENROUTER_API_KEY: 'fake-upstream-key', ADMIN_TOKEN: ADMIN, CONTACT_URL: 'https://example.com/top-up', SIGNUPS_PER_IP_PER_DAY: '50' },
   stdio: ['ignore', cloudLog, cloudLog],
 });
 children.push(cloud);
+// the website: sign-in and one studio per person (small storage, to test the quota)
+const hubLog = fs.openSync(path.join(out, 'hub.log'), 'a');
+const hub = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--import', 'tsx', path.join(root, 'src', 'hub', 'main.ts')], {
+  cwd: root,
+  env: { ...process.env, HUB_PORT: String(hubPort), HUB_DATA: path.join(data, 'web'), CLOUD_URL: cloudBase, STORAGE_FREE_MB: '30', HUB_IDLE_MINUTES: '30' },
+  stdio: ['ignore', hubLog, hubLog],
+});
+children.push(hub);
 const serverLog = fs.openSync(path.join(out, 'server.log'), 'a');
 const server = spawn(process.execPath, [path.join(root, 'bin', 'director.mjs'), 'start', '--port', String(port), '--no-open'], {
   cwd: root,
@@ -100,6 +109,7 @@ try {
   console.log(`Starting Cutroom on ${base} (data: ${data})…`);
   if (!(await waitHealthy(`${base}/api/health`, 180_000))) throw new Error(`The app did not start; see ${path.join(out, 'server.log')}`);
   if (!(await waitHealthy(`${cloudBase}/v1/health`, 60_000))) throw new Error(`Cutroom Cloud did not start; see ${path.join(out, 'cloud.log')}`);
+  if (!(await waitHealthy(`${hubBase}/hub/health`, 60_000))) throw new Error(`The website hub did not start; see ${path.join(out, 'hub.log')}`);
 
   // 4) the suites, one after another
   const results = [];
@@ -121,6 +131,7 @@ try {
         CUTROOM_E2E_LLM_LOG: llmLog,
         CUTROOM_E2E_CLOUD: cloudBase,
         CUTROOM_E2E_ADMIN: ADMIN,
+        CUTROOM_E2E_HUB: hubBase,
       },
     });
     process.stdout.write(r.stdout ?? '');

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { HOSTED } from './hosted';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { getRequestListener } from '@hono/node-server';
@@ -56,7 +57,7 @@ export const startServer = async (opts: StartOptions = {}) => {
     dev,
     extraRoutes: (a) => {
       installAgentRoutes(a);
-      installMcpRoutes(a);
+      if (!HOSTED) installMcpRoutes(a);
       installYouTubeRoutes(a);
     },
   });

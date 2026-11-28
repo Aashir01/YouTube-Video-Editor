@@ -5,12 +5,15 @@ import { store } from '../storage/projects';
 import { authUrl, disconnect, handleCallback, uploadVideo, youtubeConfigured } from '../services/youtube';
 import { youtubeExtras } from '../subtitles';
 import { bus } from '../events';
+import { HOSTED } from '../hosted';
 
 export const installYouTubeRoutes = (app: Hono): void => {
   app.get('/api/youtube/status', (c) => c.json(youtubeConfigured()));
 
   app.get('/api/youtube/connect', (c) => {
-    const origin = new URL(c.req.url).origin.replace('localhost', '127.0.0.1');
+    // on the website the studio sits behind the hub and Caddy: the address people see is https
+    const proto = HOSTED ? (c.req.header('x-forwarded-proto') ?? 'https').split(',')[0]!.trim() : '';
+    const origin = HOSTED ? `${proto}://${c.req.header('host')}` : new URL(c.req.url).origin.replace('localhost', '127.0.0.1');
     return c.redirect(authUrl(`${origin}/api/youtube/callback`));
   });
 

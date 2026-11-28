@@ -14,6 +14,7 @@ const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, classN
 );
 
 const fmt = (n: number) => n.toLocaleString('en-US');
+const size = (mb: number) => (mb < 1000 ? `${mb} MB` : `${(mb / 1000).toFixed(1).replace(/\.0$/, '')} GB`);
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 const when = (ms: number) => new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -80,6 +81,16 @@ const SignIn: React.FC<{ status: CloudStatus; onDone: (s: CloudStatus) => void }
 
 const Account: React.FC<{ status: CloudStatus; onChange: (s: CloudStatus) => void }> = ({ status, onChange }) => {
   const a = status.account;
+  // on the website, signing out of Cutroom AI is signing out of the site
+  const hosted = useStudio((s) => Boolean(s.system?.hosted));
+  const [storage, setStorage] = useState<{ usedMb: number; limitMb: number | null } | null>(null);
+  useEffect(() => {
+    if (hosted)
+      api
+        .hostedStatus()
+        .then((r) => setStorage(r.storage))
+        .catch(() => undefined);
+  }, [hosted]);
   const [busy, setBusy] = useState(false);
   const [usage, setUsage] = useState<CloudUsage | null>(null);
   useEffect(() => {
@@ -110,10 +121,10 @@ const Account: React.FC<{ status: CloudStatus; onChange: (s: CloudStatus) => voi
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">{a.name || a.email}</div>
-            <div className="truncate text-[11px] text-dim">{a.email}</div>
+            {a.name && <div className="truncate text-[11px] text-dim">{a.email}</div>}
           </div>
           <Badge tone={a.plan === 'free' ? 'default' : 'accent'}>{a.planName} plan</Badge>
-          <button className="btn btn-sm btn-ghost text-dim" disabled={busy} onClick={() => void run(() => api.cloudLogout(), 'Signed out of Cutroom AI')}>
+          <button className="btn btn-sm btn-ghost text-dim" disabled={busy} onClick={() => (hosted ? window.location.assign('/logout') : void run(() => api.cloudLogout(), 'Signed out of Cutroom AI'))}>
             <LogOut className="size-3.5" /> Sign out
           </button>
         </div>
@@ -133,6 +144,12 @@ const Account: React.FC<{ status: CloudStatus; onChange: (s: CloudStatus) => voi
             {a.credits.bonus > 0 && <span>Gifts: {fmt(a.credits.bonus)}</span>}
             {a.credits.extra > 0 && <span>Bought: {fmt(a.credits.extra)} (never expire)</span>}
             {a.planUntil && <span>Plan until {day(a.planUntil)}</span>}
+            {storage && (
+              <span data-testid="storage">
+                Storage: {size(storage.usedMb)}
+                {storage.limitMb ? ` of ${size(storage.limitMb)}` : ''}
+              </span>
+            )}
             {a.plan === 'free' && <span>Free plan renders end with a small “Made with Cutroom” badge (Creator removes it)</span>}
           </div>
         </div>
@@ -268,6 +285,7 @@ const Invite: React.FC<{ account: NonNullable<CloudStatus['account']> }> = ({ ac
 };
 
 export const CloudSection: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
+  const hosted = useStudio((s) => Boolean(s.system?.hosted));
   const status = useStudio((s) => s.cloud);
   const setCloud = useStudio((s) => s.setCloud);
   const refreshCloud = useStudio((s) => s.refreshCloud);
@@ -300,15 +318,30 @@ export const CloudSection: React.FC<{ onChanged: () => void }> = ({ onChanged })
           AI that works the moment you sign in: the Director, Find Shorts, titles and translations run on the best low-cost models (open models like DeepSeek and Qwen, Gemini Flash, and Pro models when you need them). Start with free credits, then pay only for what you use. Prefer your own key? Add a provider under AI models instead.
         </p>
       </div>
-      {!status ? <Spinner className="text-dim" /> : status.signedIn ? <Account status={status} onChange={update} /> : <SignIn status={status} onDone={update} />}
+      {!status ? (
+        <Spinner className="text-dim" />
+      ) : status.signedIn ? (
+        <Account status={status} onChange={update} />
+      ) : hosted ? (
+        <Card className="text-xs text-muted">
+          Your sign-in expired.{' '}
+          <a className="font-semibold text-accent-2-ink hover:underline" href="/logout">
+            Sign in again
+          </a>
+        </Card>
+      ) : (
+        <SignIn status={status} onDone={update} />
+      )}
       {status && <Plans status={status} />}
       {status?.signedIn && status.account?.referralCode && <Invite account={status.account} />}
+      {!hosted && (
       <details className="text-xs text-dim">
         <summary className="cursor-pointer select-none">Advanced</summary>
         <Field className="mt-2" label="Cutroom Cloud server" hint="Only change this if you run your own Cutroom Cloud. Clear it to go back to Cutroom's server.">
           <input className="field font-mono text-xs" aria-label="Cutroom Cloud server" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => void saveUrl()} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
         </Field>
       </details>
+      )}
     </div>
   );
 };

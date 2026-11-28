@@ -1,4 +1,5 @@
 import type { Settings } from '../config';
+import { safeFetch } from '../hosted';
 import { decodeEntities, extractTitle, htmlToText } from './documents';
 
 export interface SearchHit {
@@ -53,7 +54,7 @@ export const webSearch = async (query: string, s: Settings, n = 6): Promise<{ pr
 
 /** Fetch a page as readable text, paginated with offset/limit. */
 export const fetchUrlText = async (url: string, opts: { offset?: number; limit?: number } = {}): Promise<{ title: string; text: string; total: number; contentType: string }> => {
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.5' }, redirect: 'follow' });
+  const res = await safeFetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.5' } });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const contentType = res.headers.get('content-type') ?? '';
   let title = '';

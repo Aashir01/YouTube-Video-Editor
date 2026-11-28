@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { assertStorage, safeFetch } from '../hosted';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { AssetSchema, type Asset, type AssetKind } from '../../shared/schema';
@@ -307,8 +308,9 @@ export const downloadToProject = async (
   name: string,
   opts: Omit<RegisterOptions, 'sourcePath' | 'originalName'> = {},
 ): Promise<Asset> => {
-  const res = await fetch(url, { headers: { 'User-Agent': 'DirectorStudio/1.0' } });
+  const res = await safeFetch(url, { headers: { 'User-Agent': 'DirectorStudio/1.0' } });
   if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) for ${url}`);
+  await assertStorage(Number(res.headers.get('content-length')) || 0);
   const tmp = path.join(store.mediaDir(projectId), `.dl-${uid('t')}${path.extname(name) || ''}`);
   await fsp.mkdir(path.dirname(tmp), { recursive: true });
   const buf = Buffer.from(await res.arrayBuffer());

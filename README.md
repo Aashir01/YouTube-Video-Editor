@@ -107,6 +107,8 @@ The editor UI, the AI agent and MCP clients all edit the **same project document
 
 ## Quick start
 
+**On the web:** open the Cutroom website, create an account and start editing in your browser. There's nothing to install, and AI credits are included. To run the website yourself, see [docs/WEB.md](docs/WEB.md).
+
 ### 1. Install and run (pick one)
 
 **One click** (Windows, macOS, Linux). Download the project (**Code → Download ZIP** on GitHub, then unzip it, or `git clone` it). Then:
@@ -338,6 +340,7 @@ npm run dev         # server + Vite with hot reload on http://localhost:3333
 npm test            # unit + integration tests (timeline, ops, keyframes, reframe, agent loop, LLM adapters, MCP, services)
 npm run test:e2e    # browser tests of the whole app (needs FFmpeg + `npx playwright install chromium`; see tests/e2e)
 npm run typecheck
+npm run hub         # the Cutroom website (sign-in + a studio per person) on http://127.0.0.1:8080; see docs/WEB.md
 npm run cloud       # Cutroom Cloud (accounts, credits, AI gateway) on http://localhost:8787; see docs/CLOUD.md
 npx tsx scripts/template-gallery.ts   # renders every template as stills into dist/gallery
 ```
@@ -350,11 +353,13 @@ src/server/             HTTP API, storage, media pipeline, rendering, services, 
 src/server/agent/       Director loop, prompts, skills (Markdown), 56 tools
 src/web/                the editor UI
 src/cloud/              Cutroom Cloud: accounts, credit ledger, model catalog, the AI gateway
+src/hub/                the Cutroom website: sign-in, one studio per person, the proxy
 assets/models/          bundled ONNX models (face detection; person segmentation for background removal)
 tests/e2e/              browser test suites, fixtures and runner
 scripts/                one-off tools (converting the segmentation model to ONNX)
 docs/ARCHITECTURE.md    how it all fits together
 docs/CLOUD.md           running Cutroom Cloud: plans, pricing, models, admin, payments
+docs/WEB.md             running the Cutroom website
 ```
 
 ## Licensing notes

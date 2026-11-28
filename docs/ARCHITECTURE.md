@@ -339,6 +339,18 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - **Runtime:** runs as `node`, with `DIRECTOR_DATA_DIR=/data` on a volume and a health check on `/api/health`.
   - **Compose:** publishes on `127.0.0.1:3333` only and gives Chrome 1 GB of shared memory.
 
+- **The website** (`src/hub`, [WEB.md](WEB.md)):
+  - **Sign-in:** a hub signs people in with Cutroom Cloud accounts, using an HttpOnly session cookie. The Cloud token stays on the server.
+  - **Studios:** the hub starts one studio per person: the normal app with `CUTROOM_HOSTED=1`, its own data folder, and the person's Cutroom AI sign-in written into its settings. It then streams that person's requests to the studio.
+  - **Idle studios** are stopped unless `/api/hosted/status` says they are busy.
+  - **Website mode** (`src/server/hosted.ts`):
+    - turns off MCP;
+    - checks every server-side download of a user-given URL, and each redirect, against private networks;
+    - enforces a storage quota and an upload limit;
+    - caps renders;
+    - hides server paths;
+    - skips the `.env` file, so the operator's keys never become users' keys.
+
 ## 11. Tests
 
 - **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, Cutroom Cloud (the credit ledger, plans, pricing and the gateway against a scripted upstream), the retention coach (each finding and that its fix resolves it), the autopilot schedule, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
@@ -357,6 +369,13 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - **A scheduled run:** two found Shorts are made, rendered and uploaded as private, one a day from the chosen time, best first, with titles, hooks and captions.
   - **A render-only run:** started through the Director's tool, then stopped.
 
+- **The website** (`hosted` suite): the runner also starts the hub, which starts real studios. The suite checks:
+  - sign-up on the landing page;
+  - a studio already signed in to Cutroom AI, with AI billed in credits;
+  - uploads, and media served with ranges;
+  - the storage quota, the private-network guard, and MCP being off;
+  - a second account seeing none of the first one's projects;
+  - signing out and back in.
 - **Cutroom Cloud** (`cloud` suite): the runner also starts Cloud on its own database, billing the scripted model, which reports a cost like OpenRouter does.
   - **Account and model:** the suite creates an account in Settings, switches the Director to Cutroom AI and runs a session.
   - **Charges:** it checks every request's charge against its cost, and that the meter follows.
@@ -367,7 +386,7 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 
 ## 12. Security notes
 
-- The server binds to `127.0.0.1` by default.
+- The server binds to `127.0.0.1` by default. On the website, studios are reached only through the hub; see the website-mode notes above.
 - Settings are stored with file mode 600. API keys are masked (`••••abcd`) in every API response, and masked values sent back are merged with the stored secrets.
 - Media paths are resolved inside the project folder, which prevents path traversal.
 - Agent-written code runs only inside the browser and the render sandbox, after static checks. The server only checks it statically and never executes it.

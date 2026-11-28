@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import type { Word } from '../../shared/schema';
 import { uid } from '../../shared/ids';
-import { CACHE_DIR, type Settings } from '../config';
+import { CACHE_DIR, SHARED_CACHE_DIR, type Settings } from '../config';
 import { floatToWav, pcmToWav, probe, runFf } from '../media/ffmpeg';
 import { cleanWords, pickTranscriptionEngine, transcribeFile } from './transcribe';
 
@@ -241,7 +241,7 @@ const kokoro = async (text: string, s: Settings, voice?: string, speed?: number)
   if (!kokoroPromise) {
     kokoroPromise = (async () => {
       const tf = await importOptional<TransformersModule>('@huggingface/transformers');
-      tf.env.cacheDir = path.join(CACHE_DIR, 'models');
+      tf.env.cacheDir = path.join(SHARED_CACHE_DIR, 'models');
       const { KokoroTTS } = (await importOptional('kokoro-js')) as { KokoroTTS: { from_pretrained: (id: string, o: Record<string, unknown>) => Promise<KokoroInstance> } };
       return KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype: 'q8', device: 'cpu' });
     })();

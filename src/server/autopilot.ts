@@ -36,6 +36,7 @@ export const readAutopilot = async (projectId: string): Promise<AutopilotState |
 };
 
 export const isAutopilotRunning = (projectId: string) => runs.has(projectId);
+export const autopilotsRunning = () => runs.size;
 
 const MIN_LEAD = 20 * 60_000;
 

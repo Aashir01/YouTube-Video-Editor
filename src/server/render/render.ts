@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { HOSTED, RENDER_CONCURRENCY_LIMIT } from '../hosted';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -15,7 +16,7 @@ import {
 import { RenderRecordSchema, type CompositionInput, type Project, type RenderRecord, type ThumbnailInput } from '../../shared/schema';
 import { captionWords, projectDuration, timelineWords } from '../../shared/timeline';
 import { uid } from '../../shared/ids';
-import { APP_ROOT, CACHE_DIR, getSettings, madeWithCutroom } from '../config';
+import { APP_ROOT, SHARED_CACHE_DIR, getSettings, madeWithCutroom } from '../config';
 import { bus } from '../events';
 import { store } from '../storage/projects';
 import { exportAudio, normalizeLoudness, probe } from '../media/ffmpeg';
@@ -76,7 +77,7 @@ let bundleState: { hash: string; promise: Promise<string> } | null = null;
 export const getBundle = (onProgress?: (p: number) => void): Promise<string> => {
   const hash = hashSources();
   if (bundleState && bundleState.hash === hash) return bundleState.promise;
-  const outDir = path.join(CACHE_DIR, `bundle-${hash}`);
+  const outDir = path.join(SHARED_CACHE_DIR, `bundle-${hash}`);
   const promise = (async () => {
     if (fs.existsSync(path.join(outDir, 'index.html'))) return outDir;
     const tmp = `${outDir}.tmp-${process.pid}`;
@@ -86,7 +87,7 @@ export const getBundle = (onProgress?: (p: number) => void): Promise<string> => 
     await fsp.rm(outDir, { recursive: true, force: true });
     await fsp.rename(tmp, outDir);
     // drop older bundles
-    for (const d of await fsp.readdir(CACHE_DIR)) if (d.startsWith('bundle-') && d !== `bundle-${hash}`) await fsp.rm(path.join(CACHE_DIR, d), { recursive: true, force: true }).catch(() => undefined);
+    for (const d of await fsp.readdir(SHARED_CACHE_DIR)) if (d.startsWith('bundle-') && !d.startsWith(`bundle-${hash}`) && !d.includes('.tmp-')) await fsp.rm(path.join(SHARED_CACHE_DIR, d), { recursive: true, force: true }).catch(() => undefined);
     console.log(`[render] composition bundled in ${((Date.now() - started) / 1000).toFixed(1)}s`);
     return outDir;
   })();
@@ -158,6 +159,7 @@ interface ActiveRender {
 }
 
 const active = new Map<string, ActiveRender>();
+export const rendersRunning = () => active.size;
 let queue: Promise<unknown> = Promise.resolve();
 
 const saveRecord = async (projectId: string, record: RenderRecord) => {
@@ -189,6 +191,7 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
   const duration = projectDuration(project);
   if (duration <= 0) throw new Error('The timeline is empty — add clips before rendering.');
   const preset = opts.preset ?? getSettings().render.quality;
+  if (HOSTED && preset === '4k' && !opts.audioOnly) throw new Error('4K renders are available in the desktop app; on the website, render in High quality (1080p).');
   const record = RenderRecordSchema.parse({ id: uid('render'), kind: opts.audioOnly ? 'audio' : 'video', createdAt: new Date().toISOString(), status: 'queued', progress: 0, preset: opts.audioOnly ? 'audio' : preset });
   await saveRecord(projectId, record);
   const { cancelSignal, cancel } = makeCancelSignal();
@@ -238,7 +241,8 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
         inputProps,
         browserExecutable,
         frameRange,
-        concurrency: getSettings().render.concurrency ?? null,
+        // on the website the CPU is shared: a few frames at a time
+        concurrency: HOSTED ? Math.min(getSettings().render.concurrency ?? RENDER_CONCURRENCY_LIMIT, RENDER_CONCURRENCY_LIMIT) : (getSettings().render.concurrency ?? null),
         cancelSignal,
         logLevel: 'error',
         enforceAudioTrack: true,

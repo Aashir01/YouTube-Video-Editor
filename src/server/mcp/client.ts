@@ -1,4 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { HOSTED } from '../hosted';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { getSettings, type McpServerConfig } from '../config';
@@ -33,7 +34,8 @@ class McpManager {
 
   sync(): Promise<void> {
     const run = async () => {
-      const servers = getSettings().mcpServers;
+      // on the Cutroom website, MCP servers (which start programs) are off
+      const servers = HOSTED ? {} : getSettings().mcpServers;
       for (const [name, conn] of this.conns) {
         const cfg = servers[name];
         if (!cfg || JSON.stringify(cfg) !== conn.key) {

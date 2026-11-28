@@ -5,7 +5,7 @@ import path from 'node:path';
 import OpenAI from 'openai';
 import type { Word } from '../../shared/schema';
 import { uid } from '../../shared/ids';
-import { CACHE_DIR, type Settings } from '../config';
+import { CACHE_DIR, SHARED_CACHE_DIR, type Settings } from '../config';
 import { runFf } from '../media/ffmpeg';
 
 export interface TranscriptionEngine {
@@ -22,7 +22,7 @@ export interface TranscriptionResult {
 }
 
 const WHISPER_CPP_VERSION = '1.7.6';
-const whisperCppDir = () => path.join(CACHE_DIR, 'whisper.cpp');
+const whisperCppDir = () => path.join(SHARED_CACHE_DIR, 'whisper.cpp');
 
 export const localWhisperAvailable = async (): Promise<boolean> => {
   try {
@@ -186,7 +186,7 @@ const getLocalPipe = (model: string, onProgress?: (p: number) => void): Promise<
   if (!p) {
     p = (async () => {
       const tf = await importOptional<TransformersModule>('@huggingface/transformers');
-      tf.env.cacheDir = path.join(CACHE_DIR, 'models');
+      tf.env.cacheDir = path.join(SHARED_CACHE_DIR, 'models');
       const pipe = await tf.pipeline('automatic-speech-recognition', model, {
         dtype: 'q8',
         progress_callback: (e: { status?: string; progress?: number }) => {

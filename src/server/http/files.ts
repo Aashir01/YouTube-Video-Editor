@@ -1,4 +1,8 @@
 import fs from 'node:fs';
+import { HOSTED } from '../hosted';
+
+/** largest single upload: 50 GB locally, CUTROOM_MAX_UPLOAD_MB (default 4 GB) on the website */
+const MAX_UPLOAD_BYTES = HOSTED ? (Number(process.env.CUTROOM_MAX_UPLOAD_MB) || 4096) * 1024 ** 2 : 50 * 1024 ** 3;
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -66,7 +70,7 @@ export const receiveUploads = (c: Context, tmpDir: string): Promise<{ files: Upl
     c.req.raw.headers.forEach((v, k) => (headers[k] = v));
     let bb: busboy.Busboy;
     try {
-      bb = busboy({ headers, limits: { fileSize: 50 * 1024 ** 3, files: 50 } });
+      bb = busboy({ headers, limits: { fileSize: MAX_UPLOAD_BYTES, files: 50 } });
     } catch (err) {
       return reject(err);
     }
@@ -80,10 +84,16 @@ export const receiveUploads = (c: Context, tmpDir: string): Promise<{ files: Upl
       const tmpPath = path.join(tmpDir, `.up-${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`);
       const out = fs.createWriteStream(tmpPath);
       let size = 0;
+      let tooBig = false;
       stream.on('data', (d: Buffer) => (size += d.length));
+      stream.on('limit', () => (tooBig = true));
       writes.push(
         new Promise<void>((res, rej) => {
           out.on('finish', () => {
+            if (tooBig) {
+              fs.rm(tmpPath, { force: true }, () => undefined);
+              return rej(new Error(`${info.filename || 'The file'} is larger than the ${Math.round(MAX_UPLOAD_BYTES / 1024 ** 3)} GB upload limit`));
+            }
             files.push({ tmpPath, filename: info.filename || safe, mime: info.mimeType, size });
             res();
           });

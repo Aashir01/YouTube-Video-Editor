@@ -496,6 +496,7 @@ export class AgentSession {
 }
 
 const sessions = new Map<string, AgentSession>();
+export const agentsBusy = () => [...sessions.values()].filter((s) => s.busy).length;
 
 export const getSession = (projectId: string): AgentSession => {
   let s = sessions.get(projectId);

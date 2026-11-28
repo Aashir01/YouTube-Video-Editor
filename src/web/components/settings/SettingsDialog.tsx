@@ -477,6 +477,7 @@ const AgentSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ s
 };
 
 const RenderSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ s, set }) => {
+  const hosted = useStudio((st) => Boolean(st.system?.hosted));
   const system = useStudio((st) => st.system);
   return (
     <div className="flex flex-col gap-5">
@@ -490,9 +491,11 @@ const RenderSection: React.FC<{ s: Settings; set: (s: Settings) => void }> = ({ 
             <NumberField value={s.render.concurrency} placeholder="auto" min={1} max={32} step={1} precision={0} onChange={(v) => set({ ...s, render: { ...s.render, concurrency: Math.round(v) } })} />
           </Field>
         </div>
-        <Field label="Browser executable (optional)" hint="Use a local Chrome/Chromium instead of the one Remotion downloads.">
-          <input className="field font-mono text-xs" value={s.render.browserExecutable} onChange={(e) => set({ ...s, render: { ...s.render, browserExecutable: e.target.value } })} placeholder="/path/to/chrome" />
-        </Field>
+        {!hosted && (
+          <Field label="Browser executable (optional)" hint="Use a local Chrome/Chromium instead of the one Remotion downloads.">
+            <input className="field font-mono text-xs" value={s.render.browserExecutable} onChange={(e) => set({ ...s, render: { ...s.render, browserExecutable: e.target.value } })} placeholder="/path/to/chrome" />
+          </Field>
+        )}
         <Field label="Editing proxies" hint="Light copies of heavy footage (HEVC/ProRes, above 1080p, or over 20 minutes) for smooth editing. Exports always use the originals.">
           <SelectField
             value={s.render.proxies ?? 'auto'}
@@ -664,6 +667,8 @@ export const SettingsDialog: React.FC = () => {
   const section = useStudio((s) => s.settingsSection);
   const close = useStudio((s) => s.closeSettings);
   const refreshSystem = useStudio((s) => s.refreshSystem);
+  // on the Cutroom website there are no MCP servers to set up
+  const hosted = useStudio((s) => Boolean(s.system?.hosted));
   const [saved, setSaved] = useState<Settings | null>(null);
   const [effective, setEffective] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
@@ -729,7 +734,7 @@ export const SettingsDialog: React.FC = () => {
               <Settings2 className="size-4 text-accent" />
               <span className="text-sm font-bold tracking-tight">Settings</span>
             </div>
-            {NAV.map(({ id, label, icon: Icon, hue }) => (
+            {NAV.filter((n) => !(hosted && n.id === 'mcp')).map(({ id, label, icon: Icon, hue }) => (
               <button
                 key={id}
                 onClick={() => useStudio.setState({ settingsSection: id })}
