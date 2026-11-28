@@ -21,6 +21,24 @@ The app looks for Cloud at `CUTROOM_CLOUD_URL`, or `http://localhost:8787` by de
 
 ### Deploy
 
+**Quick way:** on a fresh Ubuntu 24.04 server, run as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aashir01/YouTube-Video-Editor/main/scripts/setup-cloud-server.sh | bash
+```
+
+The script ([scripts/setup-cloud-server.sh](../scripts/setup-cloud-server.sh)) does everything in the steps below:
+
+- installs Node 22, Caddy and SQLite;
+- opens only SSH, HTTP and HTTPS;
+- installs Cloud as a systemd service with a generated `ADMIN_TOKEN`;
+- serves it over HTTPS, at `DOMAIN` or else at `<ip>.sslip.io`;
+- backs up the database daily.
+
+Then add `OPENROUTER_API_KEY` to `/home/cutroom/app/.env.cloud` and run `systemctl restart cutroom-cloud`. Run the script again to update.
+
+**By hand:**
+
 A small VPS is plenty to start with: Cloud only relays requests and writes small rows.
 
 1. Install Node 22.5 or newer and copy the repository (or the Docker image, which includes `src/cloud`).
