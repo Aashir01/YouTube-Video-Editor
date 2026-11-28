@@ -97,6 +97,7 @@ export const createCloudApp = (deps: CloudDeps) => {
       creditUsd: cfg.creditUsd,
       markup: cfg.markup,
       signupCredits: cfg.signupCredits,
+      referral: cfg.referral,
       plans: Object.values(plans),
       products: PRODUCTS.map((p) => ({ ...p, checkoutUrl: cfg.checkoutUrls[p.id] ?? null })),
       contactUrl: cfg.contactUrl || null,

@@ -1,7 +1,9 @@
 // Cutroom AI: create an account in Settings (free credits), run the Director on it (each AI request
 // billed by what it cost), run out of credits, get topped up (a manual payment through the admin
 // API), sign out and back in.
-const { BASE, api, post, put, ops, check, launch, waitFor, LLM } = require('../lib.cjs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const { BASE, api, post, put, ops, check, launch, waitFor, getProject, pixel, LLM, OUT, DATA } = require('../lib.cjs');
 
 const CLOUD = process.env.CUTROOM_E2E_CLOUD;
 const ADMIN = process.env.CUTROOM_E2E_ADMIN;
@@ -10,6 +12,24 @@ const admin = async (p, body) => {
   if (!r.ok) throw new Error(`admin ${p}: ${r.status} ${await r.text()}`);
   return r.json();
 };
+// render a 6 s project and read the pixel where the "Made with Cutroom" badge goes, before and in its last seconds
+const badgeProbe = async (name) => {
+  const pid = (await post('/api/projects', { name: `Badge ${name}`, format: 'long' })).id;
+  await ops(pid, [{ op: 'addClip', trackId: 'Main', clip: { id: 'bg', type: 'scene', template: 'title-card', start: 0, duration: 6, props: { title: 'Badge' } } }]);
+  const rec = await post(`/api/projects/${pid}/render`, { preset: 'draft' });
+  const done = await waitFor(async () => (await getProject(pid)).renders.find((r) => r.id === rec.id && ['done', 'error'].includes(r.status)), 180_000, 1000);
+  if (done?.status !== 'done') throw new Error(`render failed: ${done?.error}`);
+  const file = path.join(DATA, 'projects', pid, 'renders', done.file);
+  require('fs').mkdirSync(OUT, { recursive: true });
+  const at = (t) => {
+    const img = path.join(OUT, `badge-${name}-${t}.png`);
+    execFileSync(process.env.FFMPEG_PATH || 'ffmpeg', ['-y', '-v', 'error', '-ss', String(t), '-i', file, '-frames:v', '1', img]);
+    return pixel(img, 0.038, 0.935);
+  };
+  return { before: at(1), end: at(4.6) };
+};
+const orange = ([r, g, b]) => r > 200 && g > 50 && g < 140 && b < 100;
+
 const EMAIL = 'creator@example.com';
 const PASSWORD = 'correct horse battery';
 // what one scripted request costs: 1200 + 80 tokens at the fake's prices, times the markup, rounded up
@@ -38,7 +58,7 @@ const PER_REQUEST = Math.ceil(((1200 * 2e-6 + 80 * 8e-6) * 1.15) / 0.001 - 1e-9)
   await page.getByRole('button', { name: 'Create account and get free credits' }).click();
   await page.locator('[data-sonner-toast]').filter({ hasText: /Welcome to Cutroom AI: 350 free credits/ }).waitFor({ timeout: 20000 });
   check((await page.getByTestId('cloud-credits').innerText()) === '350', 'a new account starts with 350 credits (300 welcome + 50 this month)');
-  check(await page.getByText('Free plan').isVisible(), 'on the Free plan');
+  check(await page.getByText('Free plan', { exact: true }).isVisible(), 'on the Free plan');
   await shot('01-signed-up');
   let settings = await api('/api/settings');
   check(settings.saved.llm.main.providerId === 'fake', 'signing in does not take over an AI the user set up');
@@ -79,6 +99,25 @@ const PER_REQUEST = Math.ceil(((1200 * 2e-6 + 80 * 8e-6) * 1.15) / 0.001 - 1e-9)
   check(left === 350 - PER_REQUEST * charges.length, `the meter follows the run (${await credits()} left)`);
   await shot('02-after-run');
 
+  // 3b) invites: a friend joins with the code (extra credits), and buys (credits for the inviter)
+  await page.evaluate(() => window.cutroom.store.getState().openSettings('cloud'));
+  const code = await page.getByTestId('invite-code').innerText();
+  const friend = await (await fetch(`${CLOUD}/v1/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.9.9.9' }, body: JSON.stringify({ email: 'friend@example.com', password: 'friend password', referral: code }) })).json();
+  check(friend.account?.credits.bonus === 400, `a friend who joins with the invite code ${code} gets 100 extra credits (${friend.account?.credits.bonus} in gifts)`);
+  await admin('purchase', { email: 'friend@example.com', product: 'pack_5', ref: 'friend-pack' });
+  await refresh();
+  await page.getByTestId('invite-stats').getByText('1 joined · 0 using it · 1,000 credits earned').waitFor({ timeout: 10000 });
+  check(true, "the friend's first purchase earns the inviter 1,000 credits");
+  check((await page.getByRole('link', { name: 'WhatsApp' }).getAttribute('href')).includes(encodeURIComponent(code)), 'the invite can be shared on WhatsApp with the code');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // 3c) the free plan's renders end with a small "Made with Cutroom" badge, and the export dialog says so
+  await page.evaluate(() => window.cutroom.store.getState().setExportOpen(true));
+  check(await page.getByTestId('made-with-note').isVisible(), 'the export dialog notes the badge on the free plan');
+  await page.keyboard.press('Escape');
+  const free = await badgeProbe('free');
+  check(!orange(free.before) && orange(free.end), `a free-plan render ends on the badge (rgb ${free.before} → ${free.end})`);
+
   // 4) out of credits: the Director says so, the meter turns red
   await admin('grant', { email: EMAIL, credits: -100000, note: 'e2e: use it all' });
   await refresh();
@@ -98,10 +137,12 @@ const PER_REQUEST = Math.ceil(((1200 * 2e-6 + 80 * 8e-6) * 1.15) / 0.001 - 1e-9)
   await page.waitForFunction(() => document.querySelector('[data-testid="credit-meter"]')?.getAttribute('data-credits') === '2000', null, { timeout: 10000 });
   check(true, 'the Creator plan brings 2,000 credits');
   await page.evaluate(() => window.cutroom.store.getState().openSettings('cloud'));
-  await page.getByText('Creator plan').waitFor({ timeout: 10000 });
+  await page.getByText('Creator plan', { exact: true }).waitFor({ timeout: 10000 });
   check(await page.getByTestId('cloud-usage').getByText(/Bought: Creator, 1 month/).isVisible(), 'recent use lists the purchase');
   check(await page.getByRole('link', { name: /Ask for this/ }).first().isVisible(), 'plans link to the top-up contact while checkout is not set up');
   await shot('04-creator');
+  const paid = await badgeProbe('creator');
+  check(!orange(paid.end), `on Creator the badge is gone (rgb ${paid.end})`);
 
   // 6) sign out (the Director goes back to the user's own AI), then sign in again
   await page.getByRole('button', { name: 'Sign out' }).click();

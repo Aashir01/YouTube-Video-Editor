@@ -324,6 +324,8 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - Credits sit in buckets: the monthly allowance, which resets lazily on the next use, then gifts, then bought credits.
   - A request the account can't afford gets `402`, which the Director shows as an error.
 - **Routing:** `auto` routes by content: text steps go to a cheap text model, and steps with frames go to a vision model.
+- **Invites:** the ledger rewards an inviter once an invited account has spent 100 credits on requests (capped per month), and again on its first purchase. Each is recorded once per account, with a flag.
+- **The badge:** the app caches the plan from each account check, so renders and uploads need no network to decide. `madeWithCutroom()` (signed in on Free) adds `madeWith` to the composition input, which draws the badge over the last 3.5 s. It also adds a credit line to the YouTube description.
 - **Credit meter:** the top bar shows the credits left. The meter refreshes when a Director run stops, when Settings closes, and every two minutes.
 
 ## 10. Distribution
@@ -359,6 +361,8 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
   - **Account and model:** the suite creates an account in Settings, switches the Director to Cutroom AI and runs a session.
   - **Charges:** it checks every request's charge against its cost, and that the meter follows.
   - **Out of credits:** it runs out and sees the Director's message, then applies a manual payment twice; it must count once.
+  - **Invites:** a friend joins with the invite code, and the friend's purchase credits the inviter.
+  - **The badge:** a free-plan render's last frames show the badge and the Creator plan's don't, read from the rendered pixels.
   - **Sign-in:** it signs out and back in.
 
 ## 12. Security notes

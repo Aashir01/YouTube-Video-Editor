@@ -30,6 +30,8 @@ export interface UserRow {
   referral_code: string;
   referred_by: string | null;
   disabled: number;
+  rewarded_active: number;
+  rewarded_purchase: number;
 }
 
 export interface Account {
@@ -47,6 +49,7 @@ export interface Account {
   /** may use Pro (premium) models */
   premium: boolean;
   referralCode: string;
+  referrals: { invited: number; active: number; earned: number };
   createdAt: number;
 }
 
@@ -118,7 +121,10 @@ CREATE TABLE IF NOT EXISTS users (
   signup_ip TEXT,
   referral_code TEXT NOT NULL UNIQUE,
   referred_by TEXT,
-  disabled INTEGER NOT NULL DEFAULT 0
+  disabled INTEGER NOT NULL DEFAULT 0,
+  -- the inviter was rewarded for this account's activity / first purchase
+  rewarded_active INTEGER NOT NULL DEFAULT 0,
+  rewarded_purchase INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS tokens (
   hash TEXT PRIMARY KEY,
@@ -166,6 +172,8 @@ export class Ledger {
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.db.exec(SCHEMA);
+    const cols = new Set((this.db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name));
+    for (const c of ['rewarded_active', 'rewarded_purchase']) if (!cols.has(c)) this.db.exec(`ALTER TABLE users ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`);
     this.plans = plansOf(cfg);
   }
 
@@ -264,7 +272,8 @@ export class Ledger {
         .prepare('INSERT INTO users (id, email, name, pass, plan, period_start, created_at, signup_ip, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .run(id, email, (input.name ?? '').trim().slice(0, 80), pass, 'free', now, now, input.ip ?? null, code, referrer?.id ?? null);
       const u = this.row(id)!;
-      this.write(u, { monthly: this.plans.free.monthlyCredits, bonus: this.cfg.signupCredits }, { kind: 'signup', note: 'Welcome credits' });
+      const invited = referrer ? this.cfg.referral.invitee : 0;
+      this.write(u, { monthly: this.plans.free.monthlyCredits, bonus: this.cfg.signupCredits + invited }, { kind: 'signup', note: invited ? `Welcome credits (+${invited} for joining with an invite)` : 'Welcome credits' });
       return { token: this.newToken(id, input.device ?? ''), account: this.toAccount(u) };
     });
   }
@@ -311,8 +320,38 @@ export class Ledger {
       credits: { total: u.monthly + u.bonus + u.extra, monthly: u.monthly, bonus: u.bonus, extra: u.extra },
       premium: plan.premium || u.extra > 0,
       referralCode: u.referral_code,
+      referrals: this.referralStats(u.id),
       createdAt: u.created_at,
     };
+  }
+
+  private referralStats(id: string) {
+    const r = this.db.prepare('SELECT COUNT(*) AS invited, COALESCE(SUM(rewarded_active), 0) AS active FROM users WHERE referred_by = ?').get(id) as { invited: number; active: number };
+    const e = this.db.prepare("SELECT COALESCE(SUM(delta), 0) AS earned FROM ledger WHERE user_id = ? AND kind = 'referral'").get(id) as { earned: number };
+    return { invited: Number(r.invited), active: Number(r.active), earned: Number(e.earned) };
+  }
+
+  /**
+   * Reward whoever invited this account: once when it has really used the AI (so made-up accounts
+   * earn nothing; capped per month) and once on its first purchase.
+   */
+  private rewardReferrer(u: UserRow, event: 'active' | 'purchase') {
+    if (!u.referred_by) return;
+    const col = event === 'active' ? 'rewarded_active' : 'rewarded_purchase';
+    if (u[col]) return;
+    const referrer = this.row(u.referred_by);
+    if (!referrer || referrer.disabled) return;
+    if (event === 'active') {
+      const spent = Number((this.db.prepare("SELECT COALESCE(-SUM(delta), 0) AS n FROM ledger WHERE user_id = ? AND kind = 'charge'").get(u.id) as { n: number }).n);
+      if (spent < this.cfg.referral.activeAfter) return;
+      const thisMonth = Number((this.db.prepare("SELECT COUNT(*) AS n FROM ledger WHERE user_id = ? AND kind = 'referral' AND note LIKE 'Invite used%' AND at > ?").get(referrer.id, this.now() - 30 * DAY) as { n: number }).n);
+      if (thisMonth >= this.cfg.referral.monthlyCap) return;
+    }
+    this.db.prepare(`UPDATE users SET ${col} = 1 WHERE id = ?`).run(u.id);
+    u[col] = 1;
+    this.refreshRow(referrer);
+    const amount = event === 'active' ? this.cfg.referral.active : this.cfg.referral.purchase;
+    if (amount > 0) this.write(referrer, { bonus: amount }, { kind: 'referral', note: event === 'active' ? `Invite used Cutroom AI: ${u.email.replace(/^(.).*(@.*)$/, '$1…$2')}` : `Invite bought a plan or credits: ${u.email.replace(/^(.).*(@.*)$/, '$1…$2')}` });
   }
 
   account(id: string): Account {
@@ -339,6 +378,7 @@ export class Ledger {
       const bonus = take(u.bonus);
       const extra = take(u.extra);
       this.write(u, { monthly: -(monthly + left), bonus: -bonus, extra: -extra }, { kind: 'charge', note: meta.note ?? 'AI', model: meta.model, inputTokens: meta.inputTokens, outputTokens: meta.outputTokens, costUsd: meta.costUsd });
+      this.rewardReferrer(u, 'active');
       return this.toAccount(u);
     });
   }
@@ -398,7 +438,12 @@ export class Ledger {
         if (this.db.prepare('SELECT 1 FROM purchases WHERE ref = ?').get(ref)) return { account: this.account(id), duplicate: true };
         this.db.prepare('INSERT INTO purchases (ref, user_id, product, at) VALUES (?, ?, ?, ?)').run(ref, id, product.id, this.now());
       }
-      const account = product.kind === 'plan' ? this.setPlan(id, 'creator', product.months ?? 1, `Bought: ${product.name}`) : this.grant(id, product.credits ?? 0, 'extra', `Bought: ${product.name}`, 'purchase');
+      let account = product.kind === 'plan' ? this.setPlan(id, 'creator', product.months ?? 1, `Bought: ${product.name}`) : this.grant(id, product.credits ?? 0, 'extra', `Bought: ${product.name}`, 'purchase');
+      const u = this.row(id);
+      if (u?.referred_by && !u.rewarded_purchase) {
+        this.rewardReferrer(u, 'purchase');
+        account = this.toAccount(u);
+      }
       return { account, duplicate: false };
     });
   }

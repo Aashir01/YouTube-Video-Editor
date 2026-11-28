@@ -658,6 +658,8 @@ export interface CompositionInput extends Record<string, unknown> {
   mode: 'preview' | 'render' | 'still';
   /** language -> sentence -> translation (captions shown in another language) */
   translations?: Record<string, Record<string, string>>;
+  /** end on a small "Made with Cutroom" badge (free Cutroom AI plan) */
+  madeWith?: boolean;
 }
 
 export interface ThumbnailInput extends Record<string, unknown> {

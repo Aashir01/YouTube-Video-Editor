@@ -76,6 +76,40 @@ describe('ledger', () => {
   });
 });
 
+describe('referrals', () => {
+  it('gifts the invitee, then rewards the inviter for real use and for a first purchase, once each', () => {
+    const l = new Ledger(':memory:', cfg);
+    const inviter = l.signup({ email: 'host@example.com', password: 'longenough' }).account;
+    const friend = l.signup({ email: 'friend@example.com', password: 'longenough', referral: inviter.referralCode.toLowerCase() }).account;
+    expect(friend.credits.bonus).toBe(400);
+    expect(l.signup({ email: 'other@example.com', password: 'longenough', referral: 'NOPE' }).account.credits.bonus).toBe(300);
+    expect(l.account(inviter.id).referrals).toEqual({ invited: 1, active: 0, earned: 0 });
+
+    // signing up is not enough: the reward comes once the friend has used 100 credits of AI
+    l.charge(friend.id, 60, {});
+    expect(l.account(inviter.id).credits.bonus).toBe(300);
+    l.charge(friend.id, 50, {});
+    l.charge(friend.id, 50, {});
+    expect(l.account(inviter.id).credits.bonus).toBe(600);
+    expect(l.account(inviter.id).referrals).toEqual({ invited: 1, active: 1, earned: 300 });
+
+    l.purchase(friend.id, 'pack_5', 'p1');
+    l.purchase(friend.id, 'pack_10', 'p2');
+    expect(l.account(inviter.id).credits.bonus).toBe(1600);
+    expect(l.usage(inviter.id).entries[0]!.note).toMatch(/^Invite bought a plan or credits: f…@example\.com$/);
+  });
+
+  it('caps the activity rewards a month', () => {
+    const l = new Ledger(':memory:', { ...cfg, signupsPerIpPerDay: 99, referral: { ...cfg.referral, monthlyCap: 2 } });
+    const inviter = l.signup({ email: 'cap@example.com', password: 'longenough' }).account;
+    for (let i = 0; i < 4; i++) {
+      const f = l.signup({ email: `f${i}@example.com`, password: 'longenough', referral: inviter.referralCode }).account;
+      l.charge(f.id, 150, {});
+    }
+    expect(l.account(inviter.id).referrals).toMatchObject({ invited: 4, active: 2, earned: 600 });
+  });
+});
+
 describe('pricing', () => {
   it('turns upstream cost into credits with the markup, rounding up', () => {
     const m = DEFAULT_MODELS[0]!;

@@ -15,6 +15,10 @@
  *   FREE_MONTHLY_CREDITS       free plan's monthly top-up (default 50)
  *   CREATOR_MONTHLY_CREDITS    Creator plan's monthly credits (default 2000)
  *   SIGNUPS_PER_IP_PER_DAY     abuse limit (default 3)
+ *   REFERRAL_INVITEE_CREDITS   extra gift for signing up with an invite code (default 100)
+ *   REFERRAL_ACTIVE_CREDITS    for the inviter, once the friend has used REFERRAL_ACTIVE_AFTER credits (default 300 after 100)
+ *   REFERRAL_PURCHASE_CREDITS  for the inviter, when the friend first buys something (default 1000)
+ *   REFERRAL_MONTHLY_CAP       most activity rewards an inviter gets a month (default 10)
  *   CHECKOUT_URL_<PRODUCT>     payment link per product, e.g. CHECKOUT_URL_CREATOR_MONTH
  *   TRUST_PROXY                set when behind a reverse proxy (client IPs from X-Forwarded-For)
  *   CONTACT_URL                where to ask for a manual top-up (WhatsApp, email) until checkout links exist
@@ -50,6 +54,7 @@ export interface CloudConfig {
   freeMonthlyCredits: number;
   creatorMonthlyCredits: number;
   signupsPerIpPerDay: number;
+  referral: { invitee: number; active: number; activeAfter: number; purchase: number; monthlyCap: number };
   /** read the client address from X-Forwarded-For (behind a reverse proxy) */
   trustProxy: boolean;
   /** most AI requests one account may have running at once */
@@ -72,6 +77,13 @@ export const loadCloudConfig = (env: NodeJS.ProcessEnv = process.env): CloudConf
   freeMonthlyCredits: num('FREE_MONTHLY_CREDITS', 50),
   creatorMonthlyCredits: num('CREATOR_MONTHLY_CREDITS', 2000),
   signupsPerIpPerDay: num('SIGNUPS_PER_IP_PER_DAY', 3),
+  referral: {
+    invitee: num('REFERRAL_INVITEE_CREDITS', 100),
+    active: num('REFERRAL_ACTIVE_CREDITS', 300),
+    activeAfter: num('REFERRAL_ACTIVE_AFTER', 100),
+    purchase: num('REFERRAL_PURCHASE_CREDITS', 1000),
+    monthlyCap: num('REFERRAL_MONTHLY_CAP', 10),
+  },
   maxConcurrent: num('CLOUD_MAX_CONCURRENT', 4),
   trustProxy: /^(1|true|yes)$/i.test(env.TRUST_PROXY ?? ''),
   checkoutUrls: Object.fromEntries(

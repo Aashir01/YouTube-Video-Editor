@@ -52,6 +52,7 @@ export interface CloudAccount {
   credits: { total: number; monthly: number; bonus: number; extra: number };
   premium: boolean;
   referralCode: string;
+  referrals?: { invited: number; active: number; earned: number };
 }
 
 export interface CloudModelInfo {
@@ -84,6 +85,7 @@ export interface CloudUsage {
 export interface CloudPlans {
   creditUsd: number;
   signupCredits: number;
+  referral?: { invitee: number; active: number; activeAfter: number; purchase: number; monthlyCap: number };
   plans: { id: string; name: string; monthlyCredits: number; premium: boolean }[];
   products: { id: string; name: string; price: string; kind: 'plan' | 'pack'; months?: number; credits?: number; note: string; checkoutUrl: string | null }[];
   contactUrl: string | null;
