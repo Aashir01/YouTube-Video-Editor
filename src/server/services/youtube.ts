@@ -10,6 +10,10 @@ import { getSavedSettings, getSettings, saveSettings } from '../config';
  * enable "YouTube Data API v3", and paste the client id/secret in Settings.
  */
 
+// overridable so tests can stand in for Google
+const API = () => (process.env.CUTROOM_YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, '');
+const OAUTH = () => (process.env.CUTROOM_GOOGLE_OAUTH_BASE || 'https://oauth2.googleapis.com').replace(/\/+$/, '');
+
 const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'];
 
 let pendingState: { state: string; redirectUri: string } | null = null;
@@ -40,7 +44,7 @@ export const authUrl = (redirectUri: string): string => {
 export const handleCallback = async (code: string, state: string): Promise<string> => {
   if (!pendingState || pendingState.state !== state) throw new Error('OAuth state mismatch. Start the connection again from Settings.');
   const s = getSettings().youtube;
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await fetch(`${OAUTH()}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ code, client_id: s.clientId, client_secret: s.clientSecret, redirect_uri: pendingState.redirectUri, grant_type: 'authorization_code' }),
@@ -50,7 +54,7 @@ export const handleCallback = async (code: string, state: string): Promise<strin
   if (!res.ok || !j.refresh_token) throw new Error(`Google sign-in failed: ${j.error_description ?? j.error ?? res.status}${!j.refresh_token && res.ok ? ' (no refresh token returned — remove the app from your Google account permissions and retry)' : ''}`);
   let channelTitle = '';
   try {
-    const ch = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${j.access_token}` } });
+    const ch = await fetch(`${API()}/youtube/v3/channels?part=snippet&mine=true`, { headers: { Authorization: `Bearer ${j.access_token}` } });
     const cj = (await ch.json()) as { items?: { snippet?: { title?: string } }[] };
     channelTitle = cj.items?.[0]?.snippet?.title ?? '';
   } catch {
@@ -69,7 +73,7 @@ export const disconnect = () => {
 const accessToken = async (): Promise<string> => {
   const s = getSettings().youtube;
   if (!s.refreshToken) throw new Error('YouTube is not connected. Connect your channel in Settings → YouTube.');
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await fetch(`${OAUTH()}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: s.clientId, client_secret: s.clientSecret, refresh_token: s.refreshToken, grant_type: 'refresh_token' }),
@@ -125,7 +129,7 @@ export const uploadVideo = async (project: Project, opts: UploadOptions): Promis
   const size = (await fsp.stat(opts.videoFile)).size;
   const meta = videoMetadata(project, opts);
   const parts = `snippet,status${'localizations' in meta ? ',localizations' : ''}`;
-  const init = await fetch(`https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=${parts}`, {
+  const init = await fetch(`${API()}/upload/youtube/v3/videos?uploadType=resumable&part=${parts}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Length': String(size), 'X-Upload-Content-Type': 'video/mp4' },
     body: JSON.stringify(meta),
@@ -150,7 +154,7 @@ export const uploadVideo = async (project: Project, opts: UploadOptions): Promis
   const warnings: string[] = [];
   if (opts.thumbnailFile) {
     const img = await fsp.readFile(opts.thumbnailFile);
-    const t = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${video.id}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' }, body: img });
+    const t = await fetch(`${API()}/upload/youtube/v3/thumbnails/set?videoId=${video.id}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' }, body: img });
     if (!t.ok) warnings.push(`Thumbnail not set (${t.status}) — custom thumbnails require a verified YouTube account.`);
   }
   const tracks = [...(opts.captionsFile ? [{ language: project.brief.language || 'en', name: 'Captions', file: opts.captionsFile }] : []), ...(opts.subtitles ?? [])];
@@ -159,7 +163,7 @@ export const uploadVideo = async (project: Project, opts: UploadOptions): Promis
     const srt = await fsp.readFile(track.file);
     const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId: video.id, language: track.language, name: track.name, isDraft: false } })}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
     const tail = Buffer.from(`\r\n--${boundary}--`);
-    const c = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?uploadType=multipart&part=snippet', {
+    const c = await fetch(`${API()}/upload/youtube/v3/captions?uploadType=multipart&part=snippet`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
       body: Buffer.concat([head, srt, tail]),

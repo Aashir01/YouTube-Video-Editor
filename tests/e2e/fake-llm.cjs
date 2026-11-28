@@ -11,6 +11,8 @@ fs.mkdirSync(path.dirname(LOG), { recursive: true });
 const log = (...a) => fs.appendFileSync(LOG, a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n');
 
 let callSeq = 0;
+let ytSeq = 0;
+const ytSessions = new Map();
 const chunk = (delta, finish = null) => ({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'fake-director', choices: [{ index: 0, delta, finish_reason: finish }] });
 
 // OpenRouter reports what each request cost when asked (usage: { include: true }); the Cloud gateway bills by it
@@ -143,9 +145,41 @@ const step = (body) => {
 http
   .createServer((req, res) => {
     let raw = '';
-    req.on('data', (d) => (raw += d));
+    let rawBytes = 0;
+    req.on('data', (d) => {
+      rawBytes += d.length;
+      if (rawBytes < 4 << 20) raw += d;
+    });
     req.on('end', async () => {
       try {
+        // a scripted YouTube (OAuth token, resumable upload, captions, thumbnails) for publishing tests
+        if (req.url.startsWith('/oauth/token')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ access_token: 'fake-access-token', expires_in: 3600 }));
+        }
+        if (req.method === 'POST' && req.url.startsWith('/upload/youtube/v3/videos')) {
+          const id = `vid${++ytSeq}`;
+          ytSessions.set(id, JSON.parse(raw));
+          res.writeHead(200, { Location: `http://127.0.0.1:${PORT}/upload-session/${id}` });
+          return res.end();
+        }
+        if (req.method === 'PUT' && req.url.startsWith('/upload-session/')) {
+          const id = req.url.split('/').pop();
+          const meta = ytSessions.get(id) ?? {};
+          fs.appendFileSync(LOG, `YT ${JSON.stringify({ kind: 'video', id, bytes: rawBytes, snippet: meta.snippet, status: meta.status })}\n`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ id }));
+        }
+        if (req.method === 'POST' && req.url.startsWith('/upload/youtube/v3/captions')) {
+          const meta = JSON.parse(raw.match(/\{"snippet".*?\}\}/s)?.[0] ?? '{}');
+          fs.appendFileSync(LOG, `YT ${JSON.stringify({ kind: 'captions', videoId: meta.snippet?.videoId, language: meta.snippet?.language, bytes: rawBytes })}\n`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end('{}');
+        }
+        if (req.url.startsWith('/upload/youtube/v3/thumbnails')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end('{}');
+        }
         if (req.method === 'GET' && req.url.endsWith('/models')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ object: 'list', data: [{ id: 'fake-director', object: 'model' }] }));

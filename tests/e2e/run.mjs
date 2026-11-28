@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
-const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies', 'cloud'];
+const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies', 'autopilot', 'cloud'];
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const picked = args.filter((a) => !a.startsWith('--'));
@@ -81,8 +81,9 @@ children.push(cloud);
 const serverLog = fs.openSync(path.join(out, 'server.log'), 'a');
 const server = spawn(process.execPath, [path.join(root, 'bin', 'director.mjs'), 'start', '--port', String(port), '--no-open'], {
   cwd: root,
-  // OpenAI voices (and any other OpenAI SDK call) go to the scripted model too, never to the real API
-  env: { ...process.env, DIRECTOR_DATA_DIR: data, OPENAI_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, CUTROOM_CLOUD_URL: cloudBase },
+  // OpenAI voices (and any other OpenAI SDK call) go to the scripted model too, never to the real API,
+  // and so does YouTube publishing
+  env: { ...process.env, DIRECTOR_DATA_DIR: data, OPENAI_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, CUTROOM_CLOUD_URL: cloudBase, CUTROOM_YOUTUBE_API_BASE: `http://127.0.0.1:${llmPort}`, CUTROOM_GOOGLE_OAUTH_BASE: `http://127.0.0.1:${llmPort}/oauth` },
   stdio: ['ignore', serverLog, serverLog],
 });
 children.push(server);

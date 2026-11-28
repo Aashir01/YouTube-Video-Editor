@@ -10,6 +10,7 @@ import { listTemplates, writeCodeScene } from './motion';
 import { previewFrames } from './review';
 import { createShortTool, designThumbnail, findShorts, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
+import { shortsAutopilotTool } from './autopilot';
 import { autoReframe } from './reframe';
 import { blurFaces, trackMotion } from './tracking';
 import { createMulticam } from './multicam';
@@ -72,6 +73,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   translateSubtitlesTool,
   createDubTool,
   uploadToYouTube,
+  shortsAutopilotTool,
 ];
 
 export const SUBAGENT_TOOLS: Record<string, string[]> = {

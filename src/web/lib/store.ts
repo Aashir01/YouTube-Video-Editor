@@ -5,6 +5,7 @@ import { applyOps, type EditOp } from '../../shared/ops';
 import { findClip, formatTime, projectDuration } from '../../shared/timeline';
 import type { AgentEvent, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
+import type { AutopilotState } from '../../shared/autopilot';
 import type { TranslationsState } from '../../shared/subtitles';
 import type { StudioEvent } from '../../server/events';
 import { api, type CloudStatus, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
@@ -47,6 +48,8 @@ interface StudioStore {
   transcripts: Record<string, Word[]>;
   /** Moments found for Shorts (the Shorts tab). */
   moments: MomentsState | null;
+  /** The Shorts autopilot run of this video. */
+  autopilot: AutopilotState | null;
   /** Subtitles in other languages (translations of the captions). */
   translations: TranslationsState | null;
   chat: ChatSnapshot;
@@ -177,6 +180,10 @@ export const useStudio = create<StudioStore>((set, get) => {
         .then((r) => get().projectId === id && set({ moments: r.state }))
         .catch(() => undefined),
       api
+        .autopilot(id)
+        .then((r) => get().projectId === id && set({ autopilot: r.state }))
+        .catch(() => undefined),
+      api
         .translations(id)
         .then((r) => get().projectId === id && set({ translations: r.state }))
         .catch(() => undefined),
@@ -237,6 +244,9 @@ export const useStudio = create<StudioStore>((set, get) => {
       case 'translations':
         set({ translations: e.state });
         return;
+      case 'autopilot':
+        set({ autopilot: e.state });
+        return;
     }
   };
 
@@ -272,6 +282,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     history: { canUndo: false, canRedo: false },
     transcripts: {},
     moments: null,
+    autopilot: null,
     translations: null,
     chat: EMPTY_CHAT,
     jobs: {},
@@ -308,7 +319,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     openProject: async (id) => {
       disconnect?.();
       transcriptSig = '';
-      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, moments: null, translations: null, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
+      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, moments: null, autopilot: null, translations: null, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
       try {
         const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
         if (get().projectId !== id) return;
