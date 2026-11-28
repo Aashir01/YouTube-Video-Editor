@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 54 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 55 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -135,7 +135,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 54 in total):
+- **Tools** (`tools/`, 55 in total):
 
   | Category | Tools |
   |---|---|
@@ -147,7 +147,7 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
   | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion`, `create_multicam`, `remove_background`, `stabilize_video`, `apply_lut`, `cut_to_beat` |
   | Motion | `list_templates`, `write_code_scene` |
-  | Review | `check_timeline`, `preview_frames` |
+  | Review | `check_timeline`, `preview_frames`, `review_retention` |
   | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `find_shorts`, `create_short`, `translate_subtitles`, `create_dub`, `upload_to_youtube`, `shorts_autopilot` |
 
 - **Human in the loop**: `ask_user` renders a question card (choices, multi-select, text, file drop zone) and waits for the answer. Paid actions request approval unless autonomy is "auto", and YouTube upload always does. A message typed while the agent works is delivered between steps.
@@ -203,6 +203,31 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 2. The AI answers with sentence numbers (JSON, read forgivingly: code fences, prose, trailing commas), so every moment starts and ends exactly on a sentence.
 3. Picks are snapped with a little air (never into the neighboring sentence), trimmed or extended by whole sentences to the length limits, and overlaps go to the better score.
 4. The list is saved in `moments.json` with a fingerprint of the words: the tab (and the server, which refuses stale times) knows when the edit has changed since. Making a Short reuses `createShort` and remembers the new project.
+
+### Retention coach
+
+`src/shared/retention.ts` (the Coach tab, `review_retention`) is a pure function of the project and its transcripts. The tab runs it on every edit in the browser; the Director runs it on the server. It needs no AI.
+
+1. **Hook score:** the first 5 s of a Short (vertical canvas) or 15 s of a long video is scored out of 10 on weighted checks:
+   - the first word within 0.8 s;
+   - a hook cue in the first sentence (a question, "you", a number, words like secret, mistake or why);
+   - pace in words a minute;
+   - a visual change early on;
+   - words on screen;
+   - captions, on Shorts.
+2. **Dead spots:**
+   - pauses of a second or more;
+   - filler words;
+   - stretches between visual changes (clip edges on visible tracks, zooms, keyframes, detected scene cuts) longer than 5 s on a Short or 15 s on a long video, while someone talks;
+   - minutes well below the video's own pace;
+   - silence after the last word;
+   - no call to action at the end.
+3. **Fixes:** most are plain edit ops, so a fix is one undo step:
+   - ripple cuts skip music beds and run from the last cut to the first, so earlier times stay valid;
+   - snap punch-ins are spread over long shots;
+   - the hook is added as a title.
+
+   A few fixes run a tool (captions). The rest are prompts for the Director. Fixes are worked out on the current edit, so the tab analyzes again after each one.
 
 ### Shorts autopilot
 
@@ -305,12 +330,13 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 
 ## 11. Tests
 
-- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, Cutroom Cloud (the credit ledger, plans, pricing and the gateway against a scripted upstream), the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
+- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, Cutroom Cloud (the credit ledger, plans, pricing and the gateway against a scripted upstream), the retention coach (each finding and that its fix resolves it), the autopilot schedule, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
 - **End to end** (`npm run test:e2e`, `tests/e2e/`): Playwright drives a real Chromium against `director start` on a temporary data folder. A scripted OpenAI-compatible model stands in for the AI.
   - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers", a multicam recording (three cameras and mics that started at different moments), a green screen, shaky footage, a drum loop, and 1440p and HEVC files.
   - **The scripted model** also finds Shorts, translates subtitles, and speaks for dubbed versions (the runner points OpenAI voices at it with `OPENAI_BASE_URL`).
   - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames: faces are re-detected on renders to check reframing and blur, pixel colors show which camera is on or what shows through a removed background, and shake is measured with the app's own tracker. Any browser console error fails a suite.
 
+- **Retention coach** (`coach` suite): a talk with a slow, flat opening, a long pause, a filler and a silent ending gets fixed click by click from the Coach tab. The hook and retention scores go up, one Ctrl+Z undoes a fix, the Director's tool applies fixes, and a weak hook line goes to the Director.
 - **Shorts autopilot** (`autopilot` suite): the scripted model also stands in for YouTube (OAuth token, resumable upload, captions).
   - **A scheduled run:** two found Shorts are made, rendered and uploaded as private, one a day from the chosen time, best first, with titles, hooks and captions.
   - **A render-only run:** started through the Director's tool, then stopped.

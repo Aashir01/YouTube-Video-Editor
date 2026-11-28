@@ -7,7 +7,7 @@ import { generateVoiceover, listVoicesTool, writeScript } from './script';
 import { addCaptions, addMedia, addScene, applyEdits, autoCut } from './edit';
 import { addLibrarySound, generateAudio, generateImageTool, importStock, searchStockTool } from './generate';
 import { listTemplates, writeCodeScene } from './motion';
-import { previewFrames } from './review';
+import { previewFrames, reviewRetention } from './review';
 import { createShortTool, designThumbnail, findShorts, renderVideo, setYouTubeMetadata } from './publish';
 import { uploadToYouTube } from './youtube';
 import { shortsAutopilotTool } from './autopilot';
@@ -64,6 +64,7 @@ export const BUILTIN_TOOLS: AgentTool[] = [
   listTemplates,
   writeCodeScene,
   previewFrames,
+  reviewRetention,
   checkTimeline,
   setYouTubeMetadata,
   designThumbnail,
@@ -80,7 +81,7 @@ export const SUBAGENT_TOOLS: Record<string, string[]> = {
   researcher: ['web_search', 'fetch_url', 'read_document', 'inspect_assets', 'get_transcript', 'search_transcript', 'get_project', 'load_skill'],
   scriptwriter: ['get_project', 'read_document', 'get_transcript', 'search_transcript', 'inspect_assets', 'load_skill', 'write_script', 'web_search', 'fetch_url'],
   motion_designer: ['get_project', 'get_timeline', 'list_templates', 'add_scene', 'write_code_scene', 'apply_edits', 'preview_frames', 'inspect_assets', 'view_media', 'load_skill', 'add_library_sound', 'add_media'],
-  reviewer: ['get_project', 'get_timeline', 'check_timeline', 'preview_frames', 'inspect_assets', 'get_transcript', 'view_media', 'load_skill'],
+  reviewer: ['get_project', 'get_timeline', 'check_timeline', 'review_retention', 'preview_frames', 'inspect_assets', 'get_transcript', 'view_media', 'load_skill'],
 };
 
 export const toolByName = (tools: AgentTool[], name: string) => tools.find((t) => t.name === name);

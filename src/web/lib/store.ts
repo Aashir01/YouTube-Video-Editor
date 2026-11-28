@@ -13,7 +13,7 @@ import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
-export type LeftTab = 'media' | 'transcript' | 'shorts' | 'graphics' | 'script' | 'audio' | 'brand';
+export type LeftTab = 'media' | 'transcript' | 'shorts' | 'coach' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
 export type SettingsSection = 'cloud' | 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
