@@ -2,6 +2,8 @@ import type { Project, RenderRecord, Word } from '../../shared/schema';
 import type { EditOp } from '../../shared/ops';
 import type { AnswerItem, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
+import type { AutopilotState } from '../../shared/autopilot';
+import type { IdeasResult } from '../../shared/ideas';
 import type { TranslationsState } from '../../shared/subtitles';
 
 export interface ProjectSummary {
@@ -36,6 +38,57 @@ export interface SystemInfo {
   appRoot: string;
   node: string;
   platform: string;
+}
+
+export interface CloudAccount {
+  id: string;
+  email: string;
+  name: string;
+  plan: 'free' | 'creator';
+  planName: string;
+  planUntil: number | null;
+  renewsAt: number;
+  monthlyAllowance: number;
+  credits: { total: number; monthly: number; bonus: number; extra: number };
+  premium: boolean;
+  referralCode: string;
+  referrals?: { invited: number; active: number; earned: number };
+}
+
+export interface CloudModelInfo {
+  id: string;
+  name: string;
+  tier: string;
+  vision: boolean;
+  note: string;
+}
+
+export interface CloudStatus {
+  url: string;
+  signedIn: boolean;
+  email: string;
+  account?: CloudAccount;
+  models: CloudModelInfo[];
+  /** Cutroom AI runs the Director (main or fast model) */
+  inUse: boolean;
+  main?: { providerId: string; model: string };
+  fast?: { providerId: string; model: string };
+  offline?: boolean;
+  error?: string;
+}
+
+export interface CloudUsage {
+  entries: { at: number; delta: number; kind: string; note: string; model: string | null; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; balance: number }[];
+  period: { since: number; spent: number; requests: number; costUsd: number };
+}
+
+export interface CloudPlans {
+  creditUsd: number;
+  signupCredits: number;
+  referral?: { invitee: number; active: number; activeAfter: number; purchase: number; monthlyCap: number };
+  plans: { id: string; name: string; monthlyCredits: number; premium: boolean }[];
+  products: { id: string; name: string; price: string; kind: 'plan' | 'pack'; months?: number; credits?: number; note: string; checkoutUrl: string | null }[];
+  contactUrl: string | null;
 }
 
 export interface TemplateInfo {
@@ -107,6 +160,13 @@ export interface OpsResult {
 
 export const api = {
   system: () => get<SystemInfo>('/api/system'),
+  ideas: (body: { query: string; region?: string; language?: string; days?: number; kind?: 'any' | 'shorts' | 'long'; fresh?: boolean }) => send<IdeasResult>('POST', '/api/ideas', body),
+  cloud: () => get<CloudStatus>('/api/cloud'),
+  cloudSignIn: (kind: 'signup' | 'login', body: { email: string; password: string; name?: string; referral?: string; use?: boolean }) => send<CloudStatus>('POST', `/api/cloud/${kind}`, body),
+  cloudLogout: () => send<CloudStatus>('POST', '/api/cloud/logout'),
+  cloudUse: (body: { main?: string; fast?: string } = {}) => send<CloudStatus>('POST', '/api/cloud/use', body),
+  cloudUsage: () => get<CloudUsage>('/api/cloud/usage'),
+  cloudPlans: () => get<CloudPlans>('/api/cloud/plans'),
   projects: () => get<ProjectSummary[]>('/api/projects'),
   createProject: (body: { name: string; format?: 'long' | 'short'; mode?: string; topic?: string; demo?: boolean }) => send<Project>('POST', '/api/projects', body),
   project: (id: string) => get<{ project: Project; history: HistoryInfo }>(`/api/projects/${id}`),
@@ -148,6 +208,9 @@ export const api = {
   createShort: (id: string, ranges: [number, number][], title?: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/shorts`, { ranges, title }),
   moments: (id: string) => get<{ state: MomentsState | null; current: boolean }>(`/api/projects/${id}/moments`),
   findMoments: (id: string, opts: { count?: number; minSec?: number; maxSec?: number; focus?: string }) => send<{ state: MomentsState; current: boolean }>('POST', `/api/projects/${id}/moments`, opts),
+  autopilot: (id: string) => get<{ state: AutopilotState | null }>(`/api/projects/${id}/autopilot`),
+  startAutopilot: (id: string, body: { momentIds?: string[]; upload?: boolean; firstAt?: string; everyHours?: number; retry?: boolean }) => send<{ state: AutopilotState }>('POST', `/api/projects/${id}/autopilot`, body),
+  stopAutopilot: (id: string) => send<{ stopping: boolean }>('POST', `/api/projects/${id}/autopilot/stop`),
   shortFromMoment: (id: string, momentId: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/moments/${momentId}/short`),
   translations: (id: string) => get<{ state: TranslationsState; missing: Record<string, number> }>(`/api/projects/${id}/translations`),
   translate: (id: string, languages: string[], metadata = true) =>

@@ -5,16 +5,17 @@ import { applyOps, type EditOp } from '../../shared/ops';
 import { findClip, formatTime, projectDuration } from '../../shared/timeline';
 import type { AgentEvent, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
+import type { AutopilotState } from '../../shared/autopilot';
 import type { TranslationsState } from '../../shared/subtitles';
 import type { StudioEvent } from '../../server/events';
-import { api, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
+import { api, type CloudStatus, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
 import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
-export type LeftTab = 'media' | 'transcript' | 'shorts' | 'graphics' | 'script' | 'audio' | 'brand';
+export type LeftTab = 'media' | 'transcript' | 'shorts' | 'coach' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
-export type SettingsSection = 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
+export type SettingsSection = 'cloud' | 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
 export interface Job {
   id: string;
@@ -33,6 +34,10 @@ interface StudioStore {
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   refreshSystem: () => Promise<void>;
+  /** Cutroom AI: signed in?, plan and credits */
+  cloud: CloudStatus | null;
+  refreshCloud: () => Promise<void>;
+  setCloud: (c: CloudStatus) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
 
@@ -43,6 +48,8 @@ interface StudioStore {
   transcripts: Record<string, Word[]>;
   /** Moments found for Shorts (the Shorts tab). */
   moments: MomentsState | null;
+  /** The Shorts autopilot run of this video. */
+  autopilot: AutopilotState | null;
   /** Subtitles in other languages (translations of the captions). */
   translations: TranslationsState | null;
   chat: ChatSnapshot;
@@ -173,6 +180,10 @@ export const useStudio = create<StudioStore>((set, get) => {
         .then((r) => get().projectId === id && set({ moments: r.state }))
         .catch(() => undefined),
       api
+        .autopilot(id)
+        .then((r) => get().projectId === id && set({ autopilot: r.state }))
+        .catch(() => undefined),
+      api
         .translations(id)
         .then((r) => get().projectId === id && set({ translations: r.state }))
         .catch(() => undefined),
@@ -193,9 +204,14 @@ export const useStudio = create<StudioStore>((set, get) => {
         if (e.source === 'user' && (pendingOps > 0 || queued.size > 0)) return;
         setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo, past: e.past });
         return;
-      case 'agent':
+      case 'agent': {
+        const busy = (st: string) => st === 'thinking' || st === 'working';
+        const was = get().chat.state.status;
         set({ chat: applyAgentEvent(get().chat, e.event) });
+        // a Director run just stopped (done, failed or waiting for an answer): show what it cost
+        if (busy(was) && !busy(get().chat.state.status) && get().cloud?.signedIn) void get().refreshCloud();
         return;
+      }
       case 'render':
         get().upsertRender(e.render);
         return;
@@ -228,6 +244,9 @@ export const useStudio = create<StudioStore>((set, get) => {
       case 'translations':
         set({ translations: e.state });
         return;
+      case 'autopilot':
+        set({ autopilot: e.state });
+        return;
     }
   };
 
@@ -242,10 +261,20 @@ export const useStudio = create<StudioStore>((set, get) => {
         /* server restarting */
       }
     },
+    cloud: null,
+    refreshCloud: async () => {
+      try {
+        set({ cloud: await api.cloud() });
+      } catch {
+        /* server restarting */
+      }
+    },
+    setCloud: (cloud) => set({ cloud }),
     openSettings: (section) => set({ settingsOpen: true, settingsSection: section ?? get().settingsSection }),
     closeSettings: () => {
       set({ settingsOpen: false });
       void get().refreshSystem();
+      void get().refreshCloud();
     },
 
     projectId: null,
@@ -253,6 +282,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     history: { canUndo: false, canRedo: false },
     transcripts: {},
     moments: null,
+    autopilot: null,
     translations: null,
     chat: EMPTY_CHAT,
     jobs: {},
@@ -289,7 +319,7 @@ export const useStudio = create<StudioStore>((set, get) => {
     openProject: async (id) => {
       disconnect?.();
       transcriptSig = '';
-      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, moments: null, translations: null, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
+      set({ projectId: id, project: null, chat: EMPTY_CHAT, transcripts: {}, moments: null, autopilot: null, translations: null, jobs: {}, selection: [], time: 0, playing: false, loadError: null, rightTab: 'director', composerAttachments: [], range: null, loopRange: false, playbackRate: 1 });
       try {
         const [{ project, history }, chat] = await Promise.all([api.project(id), api.chat(id)]);
         if (get().projectId !== id) return;

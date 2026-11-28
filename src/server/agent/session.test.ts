@@ -140,7 +140,7 @@ describe('Director agent loop', () => {
       () => ({ toolCalls: [call('delegate', { agent: 'reviewer', task: 'Review the whole timeline and report issues.' })] }),
       (req) => {
         // sub-agent request: only reviewer tools are offered
-        expect(req.tools.map((t) => t.name).sort()).toEqual(['check_timeline', 'get_project', 'get_timeline', 'get_transcript', 'inspect_assets', 'load_skill', 'preview_frames', 'view_media'].sort());
+        expect(req.tools.map((t) => t.name).sort()).toEqual(['check_timeline', 'get_project', 'get_timeline', 'get_transcript', 'inspect_assets', 'load_skill', 'preview_frames', 'review_retention', 'view_media'].sort());
         return { toolCalls: [call('check_timeline', {})] };
       },
       () => ({ text: 'REPORT: timeline is empty; add content.' }),

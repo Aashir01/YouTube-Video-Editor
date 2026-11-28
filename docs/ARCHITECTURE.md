@@ -11,7 +11,7 @@ Cutroom is a local web app: a Node server owns the projects, media pipeline, ren
 │ ProjectStore ── applyOps (src/shared/ops.ts) ── history (undo/redo) ── EventBus                         │
 │ Media pipeline: upload → probe/thumb/filmstrip/waveform/silences/scenes/loudness → transcription      │
 │ Renderer: Remotion bundle (cached) → renderMedia/renderStill → FFmpeg loudnorm → MP4/MP3 + SRT         │
-│ Agent: Director loop ── 53 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
+│ Agent: Director loop ── 56 tools ── skills ── sub-agents ── LLM adapters (Anthropic / OpenAI / Gemini)  │
 │ MCP server (/mcp HTTP, stdio) · MCP client (external servers) · YouTube Data API                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -41,7 +41,7 @@ Main parts:
 | `renders[]`, `audio` | Export records (video or audio-only, whole or a range, with their subtitle languages); mix settings (duck level, loudness target) |
 | `multicam[]` | Groups of cameras and microphones of one recording, each placed on a shared clock (`offset`); camera cuts are video clips linked to their group |
 
-Some per-project data lives next to `project.json` instead of in it, because it is not part of the undoable edit: `moments.json` (Shorts found by the AI) and `translations.json` (the subtitle translation cache).
+Some per-project data lives next to `project.json` instead of in it, because it is not part of the undoable edit: `moments.json` (Shorts found by the AI), `autopilot.json` (the Shorts autopilot run) and `translations.json` (the subtitle translation cache).
 
 Default tracks: Main, B-roll, Graphics, Captions, Voiceover, Music, SFX. A Blur track is added between B-roll and Graphics the first time a blur box is used; blur boxes may overlap each other, so several faces can be hidden at once.
 
@@ -135,20 +135,20 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 `src/server/agent/session.ts` implements a Claude-Code-style loop per project:
 
 - **Context per turn**: the user's text plus a `<studio_state>` block (brief, brand, assets, timeline summary, lint warnings, available engines) and an optional `<editor_context>` (playhead, selected clips, in/out range) from the UI. The history is append-only so provider prompt caches stay warm.
-- **Tools** (`tools/`, 53 in total):
+- **Tools** (`tools/`, 56 in total):
 
   | Category | Tools |
   |---|---|
   | Conversation | `ask_user`, `update_plan`, `load_skill`, `delegate` |
   | Project | `get_project`, `get_timeline`, `set_brief`, `set_brand`, `set_canvas` |
   | Media | `inspect_assets`, `analyze_media`, `view_media`, `transcribe`, `get_transcript`, `search_transcript`, `read_document`, `annotate_asset`, `enhance_audio` |
-  | Research | `web_search`, `fetch_url` |
+  | Research | `web_search`, `fetch_url`, `find_ideas` |
   | Script | `write_script`, `list_voices` |
   | Generate | `generate_voiceover`, `search_stock`, `import_stock`, `generate_image`, `generate_audio`, `add_library_sound` |
   | Edit | `apply_edits`, `add_media`, `add_scene`, `add_captions`, `auto_cut`, `auto_reframe`, `blur_faces`, `track_motion`, `create_multicam`, `remove_background`, `stabilize_video`, `apply_lut`, `cut_to_beat` |
   | Motion | `list_templates`, `write_code_scene` |
-  | Review | `check_timeline`, `preview_frames` |
-  | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `find_shorts`, `create_short`, `translate_subtitles`, `create_dub`, `upload_to_youtube` |
+  | Review | `check_timeline`, `preview_frames`, `review_retention` |
+  | Publish | `set_youtube_metadata`, `design_thumbnail`, `render_video`, `find_shorts`, `create_short`, `translate_subtitles`, `create_dub`, `upload_to_youtube`, `shorts_autopilot` |
 
 - **Human in the loop**: `ask_user` renders a question card (choices, multi-select, text, file drop zone) and waits for the answer. Paid actions request approval unless autonomy is "auto", and YouTube upload always does. A message typed while the agent works is delivered between steps.
 - **Skills** are Markdown playbooks in `agent/skills/` plus user skills in `data/skills/`. They are loaded on demand to keep the base prompt small.
@@ -203,6 +203,57 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 2. The AI answers with sentence numbers (JSON, read forgivingly: code fences, prose, trailing commas), so every moment starts and ends exactly on a sentence.
 3. Picks are snapped with a little air (never into the neighboring sentence), trimmed or extended by whole sentences to the length limits, and overlaps go to the better score.
 4. The list is saved in `moments.json` with a fingerprint of the words: the tab (and the server, which refuses stale times) knows when the edit has changed since. Making a Short reuses `createShort` and remembers the new project.
+
+### Idea radar
+
+`src/server/ideas.ts` and `src/shared/ideas.ts` (the home screen, `find_ideas`):
+
+1. **Search:** one YouTube Data API search for the niche (most viewed, last 90 days, optional country, language and length; 100 quota units), then batched `videos` and `channels` lookups (1 unit each). It uses a Data API key or the connected channel.
+2. **Outlier factor:** a video's views ÷ its channel's average views per video, with a floor of 1,000 so tiny channels don't produce noise. It is a better signal than raw views, which favor big channels.
+3. **Title patterns:** the outliers (2× and up) are scanned for shared words and two-word phrases. The radar also reports title length and the share of titles with numbers or questions, and the share of Shorts.
+4. **Cache and briefs:** results are cached in `cache/ideas-*.json` for a day. "Use this idea" writes a brief for an original take into the home prompt.
+
+### Retention coach
+
+`src/shared/retention.ts` (the Coach tab, `review_retention`) is a pure function of the project and its transcripts. The tab runs it on every edit in the browser; the Director runs it on the server. It needs no AI.
+
+1. **Hook score:** the first 5 s of a Short (vertical canvas) or 15 s of a long video is scored out of 10 on weighted checks:
+   - the first word within 0.8 s;
+   - a hook cue in the first sentence (a question, "you", a number, words like secret, mistake or why);
+   - pace in words a minute;
+   - a visual change early on;
+   - words on screen;
+   - captions, on Shorts.
+2. **Dead spots:**
+   - pauses of a second or more;
+   - filler words;
+   - stretches between visual changes (clip edges on visible tracks, zooms, keyframes, detected scene cuts) longer than 5 s on a Short or 15 s on a long video, while someone talks;
+   - minutes well below the video's own pace;
+   - silence after the last word;
+   - no call to action at the end.
+3. **Fixes:** most are plain edit ops, so a fix is one undo step:
+   - ripple cuts skip music beds and run from the last cut to the first, so earlier times stay valid;
+   - snap punch-ins are spread over long shots;
+   - the hook is added as a title.
+
+   A few fixes run a tool (captions). The rest are prompts for the Director. Fixes are worked out on the current edit, so the tab analyzes again after each one.
+
+### Shorts autopilot
+
+`src/server/autopilot.ts` and `src/shared/autopilot.ts` (the Shorts tab's Autopilot card, `shorts_autopilot`):
+
+1. **Order and schedule:** found moments are ordered best first. Each gets a publish slot: the first time, then every N hours.
+2. **One at a time, in the background**, each moment goes through four steps:
+   - **Make:** the Short is created, or the one already made is reused.
+   - **Describe:** it gets its YouTube title, its hook, a link to the full video when that is uploaded, and #Shorts.
+   - **Render:** it renders through the normal render queue.
+   - **Upload:** it goes up as private with `publishAt`. A slot that has already passed moves to an hour from now, because YouTube refuses past times.
+3. **State:** the run is kept in `autopilot.json` and streamed as `autopilot` events.
+   - **Failures:** a failed Short doesn't stop the others.
+   - **Stopping:** cancels the running render.
+   - **Restarts:** a run cut short by a restart reads as stopped. "Retry" re-queues what didn't finish, at its slot.
+4. **Approval:** uploads from the Director always ask first. A click in the Shorts tab is the approval.
+5. **Tests:** the Google endpoints can be overridden (`CUTROOM_YOUTUBE_API_BASE`, `CUTROOM_GOOGLE_OAUTH_BASE`), so the e2e suite publishes to a scripted YouTube.
 
 ### Multicam
 
@@ -266,6 +317,17 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 When an engine gives no word timings, the voiceover is transcribed for alignment. If that's unavailable, timings are estimated.
 
+**Cutroom AI** is the AI provider for people without a key. It is served by Cutroom Cloud, a separate server in `src/cloud/` (see [CLOUD.md](CLOUD.md)).
+
+- **Sign-in:** signing in (`/api/cloud/*`) stores a Cloud token in settings. `getSettings()` then adds a read-only `cutroom` OpenAI-compatible provider. Its `visionModels` tell the adapter which catalog models accept images. The token is masked like every key, and only `/api/cloud` can change the sign-in.
+- **Billing:** Cloud forwards `/v1/chat/completions` to OpenRouter and reads the request's reported cost from the final usage chunk. It then writes a ledger row and takes the credits.
+  - Credits sit in buckets: the monthly allowance, which resets lazily on the next use, then gifts, then bought credits.
+  - A request the account can't afford gets `402`, which the Director shows as an error.
+- **Routing:** `auto` routes by content: text steps go to a cheap text model, and steps with frames go to a vision model.
+- **Invites:** the ledger rewards an inviter once an invited account has spent 100 credits on requests (capped per month), and again on its first purchase. Each is recorded once per account, with a flag.
+- **The badge:** the app caches the plan from each account check, so renders and uploads need no network to decide. `madeWithCutroom()` (signed in on Free) adds `madeWith` to the composition input, which draws the badge over the last 3.5 s. It also adds a credit line to the YouTube description.
+- **Credit meter:** the top bar shows the credits left. The meter refreshes when a Director run stops, when Settings closes, and every two minutes.
+
 ## 10. Distribution
 
 - **Launchers** (`Cutroom.bat`, `Cutroom.command`, `cutroom.sh`):
@@ -279,11 +341,29 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 
 ## 11. Tests
 
-- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
+- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, Cutroom Cloud (the credit ledger, plans, pricing and the gateway against a scripted upstream), the retention coach (each finding and that its fix resolves it), the autopilot schedule, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
 - **End to end** (`npm run test:e2e`, `tests/e2e/`): Playwright drives a real Chromium against `director start` on a temporary data folder. A scripted OpenAI-compatible model stands in for the AI.
   - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers", a multicam recording (three cameras and mics that started at different moments), a green screen, shaky footage, a drum loop, and 1440p and HEVC files.
   - **The scripted model** also finds Shorts, translates subtitles, and speaks for dubbed versions (the runner points OpenAI voices at it with `OPENAI_BASE_URL`).
   - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames: faces are re-detected on renders to check reframing and blur, pixel colors show which camera is on or what shows through a removed background, and shake is measured with the app's own tracker. Any browser console error fails a suite.
+
+- **Idea radar** (`ideas` suite): the scripted server also answers YouTube Data API reads. The suite checks:
+  - the prompt for a key;
+  - the ranking by outlier factor (a small channel's 150× above a big channel's 5×);
+  - the shared phrases, the country filter and the cache;
+  - the Shorts filter, the brief, and the Director's tool.
+- **Retention coach** (`coach` suite): a talk with a slow, flat opening, a long pause, a filler and a silent ending gets fixed click by click from the Coach tab. The hook and retention scores go up, one Ctrl+Z undoes a fix, the Director's tool applies fixes, and a weak hook line goes to the Director.
+- **Shorts autopilot** (`autopilot` suite): the scripted model also stands in for YouTube (OAuth token, resumable upload, captions).
+  - **A scheduled run:** two found Shorts are made, rendered and uploaded as private, one a day from the chosen time, best first, with titles, hooks and captions.
+  - **A render-only run:** started through the Director's tool, then stopped.
+
+- **Cutroom Cloud** (`cloud` suite): the runner also starts Cloud on its own database, billing the scripted model, which reports a cost like OpenRouter does.
+  - **Account and model:** the suite creates an account in Settings, switches the Director to Cutroom AI and runs a session.
+  - **Charges:** it checks every request's charge against its cost, and that the meter follows.
+  - **Out of credits:** it runs out and sees the Director's message, then applies a manual payment twice; it must count once.
+  - **Invites:** a friend joins with the invite code, and the friend's purchase credits the inviter.
+  - **The badge:** a free-plan render's last frames show the badge and the Creator plan's don't, read from the rendered pixels.
+  - **Sign-in:** it signs out and back in.
 
 ## 12. Security notes
 
@@ -291,4 +371,5 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 - Settings are stored with file mode 600. API keys are masked (`••••abcd`) in every API response, and masked values sent back are merged with the stored secrets.
 - Media paths are resolved inside the project folder, which prevents path traversal.
 - Agent-written code runs only inside the browser and the render sandbox, after static checks. The server only checks it statically and never executes it.
+- Cutroom Cloud stores scrypt password hashes and only SHA-256 hashes of app tokens. It limits signups per network and failed sign-ins, and runs its admin API only with an `ADMIN_TOKEN`.
 - YouTube uses the user's own OAuth client (Desktop app, loopback redirect), and uploads always require explicit approval.

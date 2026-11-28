@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
-const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies'];
+const ALL = ['canvas', 'timeline', 'transcript', 'record', 'palette', 'shorts', 'moments', 'languages', 'agent', 'keyframes', 'reframe', 'tracking', 'background', 'footage', 'multicam', 'proxies', 'coach', 'autopilot', 'ideas', 'cloud'];
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
 const picked = args.filter((a) => !a.startsWith('--'));
@@ -62,18 +62,28 @@ const out = path.join(here, '.out');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
-// 3) the scripted model and the app
-const [port, llmPort] = [await freePort(), await freePort()];
+// 3) the scripted model, Cutroom Cloud (accounts and credits, billing the scripted model) and the app
+const [port, llmPort, cloudPort] = [await freePort(), await freePort(), await freePort()];
+const cloudBase = `http://127.0.0.1:${cloudPort}`;
+const ADMIN = 'e2e-admin-token';
 const base = `http://127.0.0.1:${port}`;
 const llmLog = path.join(out, 'fake-llm.log');
 const children = [];
 const llm = spawn(process.execPath, [path.join(here, 'fake-llm.cjs')], { env: { ...process.env, FAKE_LLM_PORT: String(llmPort), FAKE_LLM_LOG: llmLog }, stdio: 'ignore' });
 children.push(llm);
+const cloudLog = fs.openSync(path.join(out, 'cloud.log'), 'a');
+const cloud = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--import', 'tsx', path.join(root, 'src', 'cloud', 'main.ts')], {
+  cwd: root,
+  env: { ...process.env, CLOUD_PORT: String(cloudPort), CLOUD_HOST: '127.0.0.1', CLOUD_DB: path.join(data, 'cloud', 'cloud.db'), OPENROUTER_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, OPENROUTER_API_KEY: 'fake-upstream-key', ADMIN_TOKEN: ADMIN, CONTACT_URL: 'https://example.com/top-up' },
+  stdio: ['ignore', cloudLog, cloudLog],
+});
+children.push(cloud);
 const serverLog = fs.openSync(path.join(out, 'server.log'), 'a');
 const server = spawn(process.execPath, [path.join(root, 'bin', 'director.mjs'), 'start', '--port', String(port), '--no-open'], {
   cwd: root,
-  // OpenAI voices (and any other OpenAI SDK call) go to the scripted model too, never to the real API
-  env: { ...process.env, DIRECTOR_DATA_DIR: data, OPENAI_BASE_URL: `http://127.0.0.1:${llmPort}/v1` },
+  // OpenAI voices (and any other OpenAI SDK call) go to the scripted model too, never to the real API,
+  // and so does YouTube publishing
+  env: { ...process.env, DIRECTOR_DATA_DIR: data, OPENAI_BASE_URL: `http://127.0.0.1:${llmPort}/v1`, CUTROOM_CLOUD_URL: cloudBase, CUTROOM_YOUTUBE_API_BASE: `http://127.0.0.1:${llmPort}`, CUTROOM_GOOGLE_OAUTH_BASE: `http://127.0.0.1:${llmPort}/oauth` },
   stdio: ['ignore', serverLog, serverLog],
 });
 children.push(server);
@@ -89,6 +99,7 @@ let exitCode = 0;
 try {
   console.log(`Starting Cutroom on ${base} (data: ${data})…`);
   if (!(await waitHealthy(`${base}/api/health`, 180_000))) throw new Error(`The app did not start; see ${path.join(out, 'server.log')}`);
+  if (!(await waitHealthy(`${cloudBase}/v1/health`, 60_000))) throw new Error(`Cutroom Cloud did not start; see ${path.join(out, 'cloud.log')}`);
 
   // 4) the suites, one after another
   const results = [];
@@ -108,6 +119,8 @@ try {
         CUTROOM_E2E_DATA: data,
         CUTROOM_E2E_LLM: `http://127.0.0.1:${llmPort}/v1`,
         CUTROOM_E2E_LLM_LOG: llmLog,
+        CUTROOM_E2E_CLOUD: cloudBase,
+        CUTROOM_E2E_ADMIN: ADMIN,
       },
     });
     process.stdout.write(r.stdout ?? '');

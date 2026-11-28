@@ -31,8 +31,13 @@ import { beatsFor } from '../footage';
 import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
+import { cloud } from './cloud';
+import { readAutopilot, startAutopilot, stopAutopilot } from '../autopilot';
+import { canReadYouTube, findIdeas } from '../ideas';
 
 export const api = new Hono();
+
+api.route('/cloud', cloud);
 
 const errorMessage = (err: unknown) => (err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') : err instanceof Error ? err.message : String(err));
 
@@ -108,6 +113,15 @@ api.post('/settings/models', async (c) => {
 api.post('/settings/test-llm', async (c) => {
   const body = (await c.req.json()) as { providerId?: string; provider?: unknown; model: string };
   return c.json(await testModel(resolveProvider(body), body.model));
+});
+
+api.post('/ideas', async (c) => {
+  const body = z
+    .object({ query: z.string().min(1).max(120), region: z.string().max(2).optional(), language: z.string().max(5).optional(), days: z.number().int().min(7).max(365).optional(), kind: z.enum(['any', 'shorts', 'long']).optional(), fresh: z.boolean().optional() })
+    .parse(await c.req.json());
+  // no key yet is an answer for the radar to explain, not a failure
+  if (!canReadYouTube()) return c.json({ needsKey: true, query: body.query, days: 0, fetchedAt: new Date().toISOString(), videos: [], patterns: null });
+  return c.json(await findIdeas(body));
 });
 
 api.get('/voices', async (c) => c.json(await listVoices(getSettings())));
@@ -234,6 +248,17 @@ api.post('/projects/:id/moments', async (c) => {
   const state = await findMoments(c.req.param('id'), body);
   return c.json({ state, current: true });
 });
+
+api.get('/projects/:id/autopilot', async (c) => c.json({ state: await readAutopilot(c.req.param('id')) }));
+
+api.post('/projects/:id/autopilot', async (c) => {
+  const body = z
+    .object({ momentIds: z.array(z.string()).optional(), upload: z.boolean().optional(), firstAt: z.string().optional(), everyHours: z.number().min(1).max(336).optional(), retry: z.boolean().optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  return c.json({ state: await startAutopilot(c.req.param('id'), body) });
+});
+
+api.post('/projects/:id/autopilot/stop', (c) => c.json({ stopping: stopAutopilot(c.req.param('id')) }));
 
 api.post('/projects/:id/moments/:momentId/short', async (c) => c.json(await shortFromMoment(c.req.param('id'), c.req.param('momentId'))));
 

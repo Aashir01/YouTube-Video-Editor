@@ -11,9 +11,30 @@ fs.mkdirSync(path.dirname(LOG), { recursive: true });
 const log = (...a) => fs.appendFileSync(LOG, a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n');
 
 let callSeq = 0;
+
+// a niche for the idea radar: channels with very different averages, and videos above and below them
+const IDEA_CHANNELS = {
+  big: { title: 'Big Tech', stats: { viewCount: '50000000', videoCount: '500', subscriberCount: '1000000' } },
+  small: { title: 'Small Creator', stats: { viewCount: '200000', videoCount: '100', subscriberCount: '5000' } },
+  mid: { title: 'Mid Channel', stats: { viewCount: '5000000', videoCount: '250', subscriberCount: '80000' } },
+};
+const daysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString();
+const IDEA_VIDEOS = [
+  { id: 'vidStudio', channel: 'big', title: 'My studio tour', views: 90000, duration: 'PT20M', published: daysAgo(20) },
+  { id: 'vidBest', channel: 'big', title: 'Best AI tools for 2026', views: 500000, duration: 'PT12M', published: daysAgo(30) },
+  { id: 'vid1000', channel: 'small', title: 'How I made $1000 with AI tools in 7 days', views: 300000, duration: 'PT8M12S', published: daysAgo(10) },
+  { id: 'vidNobody', channel: 'mid', title: 'AI tools nobody talks about?', views: 400000, duration: 'PT45S', published: daysAgo(5) },
+  { id: 'vidHonest', channel: 'mid', title: 'Make money with AI tools: the honest truth', views: 160000, duration: 'PT15M', published: daysAgo(40) },
+  { id: 'vidMic', channel: 'small', title: 'Unboxing my new mic', views: 3000, duration: 'PT58S', published: daysAgo(15) },
+];
+let ytSeq = 0;
+const ytSessions = new Map();
 const chunk = (delta, finish = null) => ({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'fake-director', choices: [{ index: 0, delta, finish_reason: finish }] });
 
-const send = async (res, { text = '', calls = [] }) => {
+// OpenRouter reports what each request cost when asked (usage: { include: true }); the Cloud gateway bills by it
+const usageOf = (body) => ({ prompt_tokens: 1200, completion_tokens: 80, ...(body?.usage?.include ? { cost: 1200 * 2e-6 + 80 * 8e-6 } : {}) });
+
+const send = async (res, { text = '', calls = [] }, body) => {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const write = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   write(chunk({ role: 'assistant', content: '' }));
@@ -31,7 +52,7 @@ const send = async (res, { text = '', calls = [] }) => {
     write(chunk({ tool_calls: [{ index: i, function: { arguments: args.slice(mid) } }] }));
   });
   write(chunk({}, calls.length ? 'tool_calls' : 'stop'));
-  write({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: 0, model: 'fake-director', choices: [], usage: { prompt_tokens: 1200, completion_tokens: 80 } });
+  write({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: 0, model: 'fake-director', choices: [], usage: usageOf(body) });
   res.write('data: [DONE]\n\n');
   res.end();
 };
@@ -140,9 +161,58 @@ const step = (body) => {
 http
   .createServer((req, res) => {
     let raw = '';
-    req.on('data', (d) => (raw += d));
+    let rawBytes = 0;
+    req.on('data', (d) => {
+      rawBytes += d.length;
+      if (rawBytes < 4 << 20) raw += d;
+    });
     req.on('end', async () => {
       try {
+        // a scripted YouTube (OAuth token, resumable upload, captions, thumbnails) for publishing tests
+        if (req.url.startsWith('/oauth/token')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ access_token: 'fake-access-token', expires_in: 3600 }));
+        }
+        if (req.method === 'POST' && req.url.startsWith('/upload/youtube/v3/videos')) {
+          const id = `vid${++ytSeq}`;
+          ytSessions.set(id, JSON.parse(raw));
+          res.writeHead(200, { Location: `http://127.0.0.1:${PORT}/upload-session/${id}` });
+          return res.end();
+        }
+        if (req.method === 'PUT' && req.url.startsWith('/upload-session/')) {
+          const id = req.url.split('/').pop();
+          const meta = ytSessions.get(id) ?? {};
+          fs.appendFileSync(LOG, `YT ${JSON.stringify({ kind: 'video', id, bytes: rawBytes, snippet: meta.snippet, status: meta.status })}\n`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ id }));
+        }
+        if (req.method === 'POST' && req.url.startsWith('/upload/youtube/v3/captions')) {
+          const meta = JSON.parse(raw.match(/\{"snippet".*?\}\}/s)?.[0] ?? '{}');
+          fs.appendFileSync(LOG, `YT ${JSON.stringify({ kind: 'captions', videoId: meta.snippet?.videoId, language: meta.snippet?.language, bytes: rawBytes })}\n`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end('{}');
+        }
+        if (req.url.startsWith('/upload/youtube/v3/thumbnails')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end('{}');
+        }
+        // the YouTube Data API reads the idea radar makes
+        if (req.method === 'GET' && req.url.startsWith('/youtube/v3/')) {
+          const u = new URL(req.url, 'http://x');
+          const what = u.pathname.split('/').pop();
+          fs.appendFileSync(LOG, `YTAPI ${JSON.stringify({ what, params: Object.fromEntries(u.searchParams), auth: req.headers.authorization ?? null })}\n`);
+          const ids = (u.searchParams.get('id') ?? '').split(',');
+          const body =
+            what === 'search'
+              ? { items: IDEA_VIDEOS.map((v) => ({ id: { videoId: v.id } })) }
+              : what === 'videos'
+                ? { items: IDEA_VIDEOS.filter((v) => ids.includes(v.id)).map((v) => ({ id: v.id, snippet: { title: v.title, channelId: v.channel, channelTitle: IDEA_CHANNELS[v.channel].title, publishedAt: v.published, thumbnails: { medium: { url: '' } } }, statistics: { viewCount: String(v.views), likeCount: '10', commentCount: '2' }, contentDetails: { duration: v.duration } })) }
+                : what === 'channels'
+                  ? { items: ids.filter((id) => IDEA_CHANNELS[id]).map((id) => ({ id, statistics: IDEA_CHANNELS[id].stats })) }
+                  : { items: [{ snippet: { title: 'Test Channel' } }] };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify(body));
+        }
         if (req.method === 'GET' && req.url.endsWith('/models')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ object: 'list', data: [{ id: 'fake-director', object: 'model' }] }));
@@ -159,7 +229,7 @@ http
           const out = step(body);
           const lastUser = [...body.messages].reverse().find((m) => m.role === 'user');
           log('REQ', { tools: (body.tools ?? []).map((t) => t.function.name), msgs: body.messages.length, reply: out.calls?.map((c) => c.name) ?? 'text', lastUser: typeof lastUser?.content === 'string' ? lastUser.content : lastUser?.content });
-          return send(res, out);
+          return send(res, out, body);
         }
         res.writeHead(404);
         res.end('not found');

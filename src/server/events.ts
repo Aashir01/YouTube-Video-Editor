@@ -1,3 +1,4 @@
+import type { AutopilotState } from '../shared/autopilot';
 import type { Project, RenderRecord } from '../shared/schema';
 import type { AgentEvent } from '../shared/agent-types';
 import type { MomentsState } from '../shared/moments';
@@ -10,7 +11,8 @@ export type StudioEvent =
   | { type: 'job'; id: string; label: string; status: 'running' | 'done' | 'error'; progress?: number; detail?: string }
   | { type: 'toast'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
   | { type: 'moments'; state: MomentsState | null }
-  | { type: 'translations'; state: TranslationsState };
+  | { type: 'translations'; state: TranslationsState }
+  | { type: 'autopilot'; state: AutopilotState };
 
 type Listener = (e: StudioEvent) => void;
 

@@ -122,7 +122,50 @@ const Watermark: React.FC = () => {
   );
 };
 
-export const Main: React.FC<CompositionInput> = ({ project, assetUrls, transcripts, mode, translations }) => {
+/** The free Cutroom AI plan: a small "Made with Cutroom" badge over the last seconds. */
+const MadeWith: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames, fps } = useVideoConfig();
+  const { u, W, H } = useTheme();
+  const from = Math.max(0, durationInFrames - Math.round(fps * 3.5));
+  if (frame < from) return null;
+  const t = (frame - from) / fps;
+  const opacity = Math.min(1, t / 0.4, (durationInFrames - frame) / (fps * 0.3));
+  return (
+    <div
+      data-made-with
+      style={{
+        position: 'absolute',
+        left: W * 0.03,
+        bottom: H * 0.04,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10 * u,
+        padding: `${8 * u}px ${16 * u}px ${8 * u}px ${10 * u}px`,
+        borderRadius: 999,
+        background: 'rgba(8, 10, 18, 0.72)',
+        border: '1px solid rgba(255, 255, 255, 0.18)',
+        color: '#fff',
+        fontFamily: 'Inter Variable, Inter, system-ui, sans-serif',
+        fontSize: 22 * u,
+        fontWeight: 600,
+        letterSpacing: '-0.01em',
+        opacity,
+        transform: `translateY(${(1 - Math.min(1, t / 0.4)) * 12 * u}px)`,
+        pointerEvents: 'none',
+      }}
+    >
+      <span style={{ display: 'inline-flex', width: 30 * u, height: 30 * u, borderRadius: 8 * u, background: '#ff5a1f', alignItems: 'center', justifyContent: 'center' }}>
+        <svg viewBox="0 0 24 24" width={18 * u} height={18 * u} fill="#fff">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </span>
+      Made with Cutroom
+    </div>
+  );
+};
+
+export const Main: React.FC<CompositionInput> = ({ project, assetUrls, transcripts, mode, translations, madeWith }) => {
   const { width, height, fps } = useVideoConfig();
   const theme = useMemo(() => makeTheme(project.brand, width, height, fps), [project.brand, width, height, fps]);
   const fonts = useMemo(() => usedFonts(project), [project]);
@@ -145,6 +188,7 @@ export const Main: React.FC<CompositionInput> = ({ project, assetUrls, transcrip
           ),
         )}
         <Watermark />
+        {madeWith && <MadeWith />}
       </AbsoluteFill>
     </StudioProvider>
   );

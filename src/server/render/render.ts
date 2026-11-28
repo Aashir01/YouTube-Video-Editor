@@ -15,7 +15,7 @@ import {
 import { RenderRecordSchema, type CompositionInput, type Project, type RenderRecord, type ThumbnailInput } from '../../shared/schema';
 import { captionWords, projectDuration, timelineWords } from '../../shared/timeline';
 import { uid } from '../../shared/ids';
-import { APP_ROOT, CACHE_DIR, getSettings } from '../config';
+import { APP_ROOT, CACHE_DIR, getSettings, madeWithCutroom } from '../config';
 import { bus } from '../events';
 import { store } from '../storage/projects';
 import { exportAudio, normalizeLoudness, probe } from '../media/ffmpeg';
@@ -214,7 +214,7 @@ export const startRender = async (projectId: string, opts: RenderOptions = {}): 
       const serveUrl = await getBundle();
       const browserExecutable = await prepareBrowser();
       const fresh = await store.get(projectId);
-      const inputProps = await buildCompositionInput(fresh, 'render');
+      const inputProps = { ...(await buildCompositionInput(fresh, 'render')), madeWith: madeWithCutroom() };
       const composition = await selectComposition({ serveUrl, id: 'Main', inputProps, browserExecutable, logLevel: 'error' });
       const p = RENDER_PRESETS[preset as RenderPreset] ?? RENDER_PRESETS.standard;
       const fps = composition.fps;

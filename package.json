@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "node tests/e2e/run.mjs"
+    "test:e2e": "node tests/e2e/run.mjs",
+    "cloud": "node --disable-warning=ExperimentalWarning --import tsx src/cloud/main.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.0.0",
