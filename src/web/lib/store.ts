@@ -7,14 +7,14 @@ import type { AgentEvent, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
 import type { TranslationsState } from '../../shared/subtitles';
 import type { StudioEvent } from '../../server/events';
-import { api, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
+import { api, type CloudStatus, type HistoryInfo, type OpsResult, type SystemInfo } from './api';
 import { connectProject } from './events';
 import { errorText } from './utils';
 import { prefs } from './prefs';
 
 export type LeftTab = 'media' | 'transcript' | 'shorts' | 'graphics' | 'script' | 'audio' | 'brand';
 export type RightTab = 'director' | 'inspector';
-export type SettingsSection = 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
+export type SettingsSection = 'cloud' | 'models' | 'speech' | 'media' | 'agent' | 'render' | 'mcp' | 'youtube';
 
 export interface Job {
   id: string;
@@ -33,6 +33,10 @@ interface StudioStore {
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   refreshSystem: () => Promise<void>;
+  /** Cutroom AI: signed in?, plan and credits */
+  cloud: CloudStatus | null;
+  refreshCloud: () => Promise<void>;
+  setCloud: (c: CloudStatus) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
 
@@ -193,9 +197,14 @@ export const useStudio = create<StudioStore>((set, get) => {
         if (e.source === 'user' && (pendingOps > 0 || queued.size > 0)) return;
         setProject(e.project, { canUndo: e.canUndo, canRedo: e.canRedo, past: e.past });
         return;
-      case 'agent':
+      case 'agent': {
+        const busy = (st: string) => st === 'thinking' || st === 'working';
+        const was = get().chat.state.status;
         set({ chat: applyAgentEvent(get().chat, e.event) });
+        // a Director run just stopped (done, failed or waiting for an answer): show what it cost
+        if (busy(was) && !busy(get().chat.state.status) && get().cloud?.signedIn) void get().refreshCloud();
         return;
+      }
       case 'render':
         get().upsertRender(e.render);
         return;
@@ -242,10 +251,20 @@ export const useStudio = create<StudioStore>((set, get) => {
         /* server restarting */
       }
     },
+    cloud: null,
+    refreshCloud: async () => {
+      try {
+        set({ cloud: await api.cloud() });
+      } catch {
+        /* server restarting */
+      }
+    },
+    setCloud: (cloud) => set({ cloud }),
     openSettings: (section) => set({ settingsOpen: true, settingsSection: section ?? get().settingsSection }),
     closeSettings: () => {
       set({ settingsOpen: false });
       void get().refreshSystem();
+      void get().refreshCloud();
     },
 
     projectId: null,

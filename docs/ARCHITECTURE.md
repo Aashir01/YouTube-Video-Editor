@@ -266,6 +266,15 @@ Clip elements carry `data-clip-box` / `data-clip-kind` attributes (`text`, `box`
 
 When an engine gives no word timings, the voiceover is transcribed for alignment. If that's unavailable, timings are estimated.
 
+**Cutroom AI** is the AI provider for people without a key. It is served by Cutroom Cloud, a separate server in `src/cloud/` (see [CLOUD.md](CLOUD.md)).
+
+- **Sign-in:** signing in (`/api/cloud/*`) stores a Cloud token in settings. `getSettings()` then adds a read-only `cutroom` OpenAI-compatible provider. Its `visionModels` tell the adapter which catalog models accept images. The token is masked like every key, and only `/api/cloud` can change the sign-in.
+- **Billing:** Cloud forwards `/v1/chat/completions` to OpenRouter and reads the request's reported cost from the final usage chunk. It then writes a ledger row and takes the credits.
+  - Credits sit in buckets: the monthly allowance, which resets lazily on the next use, then gifts, then bought credits.
+  - A request the account can't afford gets `402`, which the Director shows as an error.
+- **Routing:** `auto` routes by content: text steps go to a cheap text model, and steps with frames go to a vision model.
+- **Credit meter:** the top bar shows the credits left. The meter refreshes when a Director run stops, when Settings closes, and every two minutes.
+
 ## 10. Distribution
 
 - **Launchers** (`Cutroom.bat`, `Cutroom.command`, `cutroom.sh`):
@@ -279,11 +288,17 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 
 ## 11. Tests
 
-- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
+- **Unit and integration** (`npm test`, Vitest): timeline and ops, keyframes, Shorts and finding them, the reframe, motion and multicam planners, sync by sound and the FFT, beats, subtitles and their timing, matte helpers, proxies, YouTube metadata, Cutroom Cloud (the credit ledger, plans, pricing and the gateway against a scripted upstream), the agent loop, LLM adapters, MCP and services. The planners are pure functions, so they're tested on synthetic tracks and signals.
 - **End to end** (`npm run test:e2e`, `tests/e2e/`): Playwright drives a real Chromium against `director start` on a temporary data folder. A scripted OpenAI-compatible model stands in for the AI.
   - **Fixtures:** FFmpeg makes the test media, including footage with a real face, two "speakers", a multicam recording (three cameras and mics that started at different moments), a green screen, shaky footage, a drum loop, and 1440p and HEVC files.
   - **The scripted model** also finds Shorts, translates subtitles, and speaks for dubbed versions (the runner points OpenAI voices at it with `OPENAI_BASE_URL`).
   - **Checks:** the suites use the app like a person would, then check the saved project and the rendered frames: faces are re-detected on renders to check reframing and blur, pixel colors show which camera is on or what shows through a removed background, and shake is measured with the app's own tracker. Any browser console error fails a suite.
+
+- **Cutroom Cloud** (`cloud` suite): the runner also starts Cloud on its own database, billing the scripted model, which reports a cost like OpenRouter does.
+  - **Account and model:** the suite creates an account in Settings, switches the Director to Cutroom AI and runs a session.
+  - **Charges:** it checks every request's charge against its cost, and that the meter follows.
+  - **Out of credits:** it runs out and sees the Director's message, then applies a manual payment twice; it must count once.
+  - **Sign-in:** it signs out and back in.
 
 ## 12. Security notes
 
@@ -291,4 +306,5 @@ When an engine gives no word timings, the voiceover is transcribed for alignment
 - Settings are stored with file mode 600. API keys are masked (`••••abcd`) in every API response, and masked values sent back are merged with the stored secrets.
 - Media paths are resolved inside the project folder, which prevents path traversal.
 - Agent-written code runs only inside the browser and the render sandbox, after static checks. The server only checks it statically and never executes it.
+- Cutroom Cloud stores scrypt password hashes and only SHA-256 hashes of app tokens. It limits signups per network and failed sign-ins, and runs its admin API only with an `ADMIN_TOKEN`.
 - YouTube uses the user's own OAuth client (Desktop app, loopback redirect), and uploads always require explicit approval.

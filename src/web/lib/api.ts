@@ -38,6 +38,55 @@ export interface SystemInfo {
   platform: string;
 }
 
+export interface CloudAccount {
+  id: string;
+  email: string;
+  name: string;
+  plan: 'free' | 'creator';
+  planName: string;
+  planUntil: number | null;
+  renewsAt: number;
+  monthlyAllowance: number;
+  credits: { total: number; monthly: number; bonus: number; extra: number };
+  premium: boolean;
+  referralCode: string;
+}
+
+export interface CloudModelInfo {
+  id: string;
+  name: string;
+  tier: string;
+  vision: boolean;
+  note: string;
+}
+
+export interface CloudStatus {
+  url: string;
+  signedIn: boolean;
+  email: string;
+  account?: CloudAccount;
+  models: CloudModelInfo[];
+  /** Cutroom AI runs the Director (main or fast model) */
+  inUse: boolean;
+  main?: { providerId: string; model: string };
+  fast?: { providerId: string; model: string };
+  offline?: boolean;
+  error?: string;
+}
+
+export interface CloudUsage {
+  entries: { at: number; delta: number; kind: string; note: string; model: string | null; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; balance: number }[];
+  period: { since: number; spent: number; requests: number; costUsd: number };
+}
+
+export interface CloudPlans {
+  creditUsd: number;
+  signupCredits: number;
+  plans: { id: string; name: string; monthlyCredits: number; premium: boolean }[];
+  products: { id: string; name: string; price: string; kind: 'plan' | 'pack'; months?: number; credits?: number; note: string; checkoutUrl: string | null }[];
+  contactUrl: string | null;
+}
+
 export interface TemplateInfo {
   id: string;
   name: string;
@@ -107,6 +156,12 @@ export interface OpsResult {
 
 export const api = {
   system: () => get<SystemInfo>('/api/system'),
+  cloud: () => get<CloudStatus>('/api/cloud'),
+  cloudSignIn: (kind: 'signup' | 'login', body: { email: string; password: string; name?: string; referral?: string; use?: boolean }) => send<CloudStatus>('POST', `/api/cloud/${kind}`, body),
+  cloudLogout: () => send<CloudStatus>('POST', '/api/cloud/logout'),
+  cloudUse: (body: { main?: string; fast?: string } = {}) => send<CloudStatus>('POST', '/api/cloud/use', body),
+  cloudUsage: () => get<CloudUsage>('/api/cloud/usage'),
+  cloudPlans: () => get<CloudPlans>('/api/cloud/plans'),
   projects: () => get<ProjectSummary[]>('/api/projects'),
   createProject: (body: { name: string; format?: 'long' | 'short'; mode?: string; topic?: string; demo?: boolean }) => send<Project>('POST', '/api/projects', body),
   project: (id: string) => get<{ project: Project; history: HistoryInfo }>(`/api/projects/${id}`),

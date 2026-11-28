@@ -13,7 +13,10 @@ const log = (...a) => fs.appendFileSync(LOG, a.map((x) => (typeof x === 'string'
 let callSeq = 0;
 const chunk = (delta, finish = null) => ({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'fake-director', choices: [{ index: 0, delta, finish_reason: finish }] });
 
-const send = async (res, { text = '', calls = [] }) => {
+// OpenRouter reports what each request cost when asked (usage: { include: true }); the Cloud gateway bills by it
+const usageOf = (body) => ({ prompt_tokens: 1200, completion_tokens: 80, ...(body?.usage?.include ? { cost: 1200 * 2e-6 + 80 * 8e-6 } : {}) });
+
+const send = async (res, { text = '', calls = [] }, body) => {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const write = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   write(chunk({ role: 'assistant', content: '' }));
@@ -31,7 +34,7 @@ const send = async (res, { text = '', calls = [] }) => {
     write(chunk({ tool_calls: [{ index: i, function: { arguments: args.slice(mid) } }] }));
   });
   write(chunk({}, calls.length ? 'tool_calls' : 'stop'));
-  write({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: 0, model: 'fake-director', choices: [], usage: { prompt_tokens: 1200, completion_tokens: 80 } });
+  write({ id: 'chatcmpl-fake', object: 'chat.completion.chunk', created: 0, model: 'fake-director', choices: [], usage: usageOf(body) });
   res.write('data: [DONE]\n\n');
   res.end();
 };
@@ -159,7 +162,7 @@ http
           const out = step(body);
           const lastUser = [...body.messages].reverse().find((m) => m.role === 'user');
           log('REQ', { tools: (body.tools ?? []).map((t) => t.function.name), msgs: body.messages.length, reply: out.calls?.map((c) => c.name) ?? 'text', lastUser: typeof lastUser?.content === 'string' ? lastUser.content : lastUser?.content });
-          return send(res, out);
+          return send(res, out, body);
         }
         res.writeHead(404);
         res.end('not found');

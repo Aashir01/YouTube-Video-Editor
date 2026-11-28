@@ -277,7 +277,7 @@ class OpenAICompatChat implements ChatModel {
       headers['X-Title'] ??= 'Cutroom';
     }
     this.client = new OpenAI({ apiKey: provider.apiKey || 'not-needed', baseURL, defaultHeaders: headers, maxRetries: 2, timeout: 15 * 60_000 });
-    this.vision = VISION_HINT.test(model);
+    this.vision = VISION_HINT.test(model) || Boolean(provider.visionModels?.includes(model));
     this.tokenParam = baseURL.includes('api.openai.com') ? 'max_completion_tokens' : 'max_tokens';
   }
 

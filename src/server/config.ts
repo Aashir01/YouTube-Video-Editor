@@ -30,6 +30,8 @@ export const ProviderSchema = z.object({
   apiKey: z.string().default(''),
   models: z.array(z.string()).default([]),
   headers: z.record(z.string(), z.string()).optional(),
+  /** models known to accept images (beyond what their names suggest) */
+  visionModels: z.array(z.string()).optional(),
 });
 export type ProviderConfig = z.infer<typeof ProviderSchema>;
 
@@ -111,6 +113,21 @@ const YouTubeSettingsSchema = z.object({
   channelTitle: z.string().default(''),
 });
 
+/** Where Cutroom Cloud runs (accounts, credits and the AI gateway); CUTROOM_CLOUD_URL overrides it. */
+export const DEFAULT_CLOUD_URL = 'http://localhost:8787';
+export const CLOUD_PROVIDER_ID = 'cutroom';
+
+const CloudSettingsSchema = z.object({
+  /** empty: CUTROOM_CLOUD_URL or the default */
+  url: z.string().default(''),
+  token: z.string().default(''),
+  email: z.string().default(''),
+  /** the catalog as of the last sign-in or account check */
+  models: z.array(z.object({ id: z.string(), name: z.string(), tier: z.string().default('standard'), vision: z.boolean().default(false), note: z.string().default('') })).default([]),
+});
+
+export const cloudUrl = (s: Settings) => (s.cloud.url || process.env.CUTROOM_CLOUD_URL || DEFAULT_CLOUD_URL).replace(/\/+$/, '');
+
 export const SettingsSchema = z.object({
   llm: LlmSettingsSchema.default(() => LlmSettingsSchema.parse({})),
   speech: SpeechSettingsSchema.default(() => SpeechSettingsSchema.parse({})),
@@ -120,6 +137,7 @@ export const SettingsSchema = z.object({
   agent: AgentSettingsSchema.default(() => AgentSettingsSchema.parse({})),
   mcpServers: z.record(z.string(), McpServerSchema).default({}),
   youtube: YouTubeSettingsSchema.default(() => YouTubeSettingsSchema.parse({})),
+  cloud: CloudSettingsSchema.default(() => CloudSettingsSchema.parse({})),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -178,6 +196,19 @@ export const getSettings = (): Settings => {
     if (!s.llm.main) s.llm.main = { providerId: p.id, model: env('DIRECTOR_MODEL') ?? p.model };
     if (!s.llm.fast) s.llm.fast = { providerId: p.id, model: env('DIRECTOR_FAST_MODEL') ?? p.fast };
   }
+  // signed in to Cutroom AI: its gateway is one more OpenAI-compatible provider
+  if (s.cloud.token && !s.llm.providers.some((p) => p.id === CLOUD_PROVIDER_ID)) {
+    const models = s.cloud.models.length ? s.cloud.models : [{ id: 'auto', vision: true }, { id: 'auto-fast', vision: true }];
+    s.llm.providers.unshift({
+      id: CLOUD_PROVIDER_ID,
+      type: 'openai-compatible',
+      name: 'Cutroom AI',
+      baseUrl: `${cloudUrl(s)}/v1`,
+      apiKey: s.cloud.token,
+      models: models.map((m) => m.id),
+      visionModels: models.filter((m) => m.vision).map((m) => m.id),
+    });
+  }
   const k = s.keys;
   k.openai ||= env('OPENAI_API_KEY');
   k.gemini ||= env('GEMINI_API_KEY', 'GOOGLE_API_KEY');
@@ -212,6 +243,7 @@ export const maskedSettings = (s: Settings) => {
   for (const k of Object.keys(m.keys) as (keyof Settings['keys'])[]) m.keys[k] = maskKey(m.keys[k]);
   m.youtube.clientSecret = maskKey(m.youtube.clientSecret);
   m.youtube.refreshToken = m.youtube.refreshToken ? MASK : '';
+  m.cloud.token = m.cloud.token ? MASK : '';
   for (const srv of Object.values(m.mcpServers)) {
     if ('env' in srv && srv.env) for (const key of Object.keys(srv.env)) srv.env[key] = maskKey(srv.env[key]);
     if ('headers' in srv && srv.headers) for (const key of Object.keys(srv.headers)) srv.headers[key] = maskKey(srv.headers[key]);
@@ -241,6 +273,9 @@ export const mergeSettingsUpdate = (prev: Settings, update: Partial<Settings>): 
     if (isMasked(update.youtube.clientSecret)) next.youtube.clientSecret = prev.youtube.clientSecret;
     if (isMasked(update.youtube.refreshToken)) next.youtube.refreshToken = prev.youtube.refreshToken;
   }
+  // the Cutroom AI sign-in changes only through /api/cloud
+  next.cloud = prev.cloud;
+  if (update.cloud?.url !== undefined && update.cloud.url !== prev.cloud.url) next.cloud = { ...prev.cloud, url: update.cloud.url.trim() };
   if (update.mcpServers) {
     for (const [name, srv] of Object.entries(next.mcpServers)) {
       const old = prev.mcpServers[name];
