@@ -10,6 +10,7 @@ import { navigate } from '../../../lib/nav';
 import { cn, errorText, formatClock } from '../../../lib/utils';
 import { Empty, Segmented, Spinner, TextInput, Tip } from '../../ui';
 import { PanelHeader } from '../LeftPanel';
+import { AutopilotCard } from './AutopilotCard';
 
 /**
  * Find Shorts: the AI reads the transcript and picks the moments that work on their own as
@@ -163,6 +164,7 @@ export const ShortsPanel: React.FC = () => {
                 The video was edited since these moments were found. Find Shorts again so the times match.
               </div>
             )}
+            {!stale && state.moments.length > 0 && <AutopilotCard projectId={project.id} count={state.moments.length} disabled={making.size > 0} />}
             {remaining.length > 1 && !stale && (
               <button className="btn btn-sm" disabled={making.size > 0} onClick={() => void make(remaining)}>
                 <Smartphone className="size-3.5" /> Make all {remaining.length} Shorts

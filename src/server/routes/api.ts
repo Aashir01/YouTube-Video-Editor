@@ -32,6 +32,7 @@ import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
 import { cloud } from './cloud';
+import { readAutopilot, startAutopilot, stopAutopilot } from '../autopilot';
 
 export const api = new Hono();
 
@@ -237,6 +238,17 @@ api.post('/projects/:id/moments', async (c) => {
   const state = await findMoments(c.req.param('id'), body);
   return c.json({ state, current: true });
 });
+
+api.get('/projects/:id/autopilot', async (c) => c.json({ state: await readAutopilot(c.req.param('id')) }));
+
+api.post('/projects/:id/autopilot', async (c) => {
+  const body = z
+    .object({ momentIds: z.array(z.string()).optional(), upload: z.boolean().optional(), firstAt: z.string().optional(), everyHours: z.number().min(1).max(336).optional(), retry: z.boolean().optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  return c.json({ state: await startAutopilot(c.req.param('id'), body) });
+});
+
+api.post('/projects/:id/autopilot/stop', (c) => c.json({ stopping: stopAutopilot(c.req.param('id')) }));
 
 api.post('/projects/:id/moments/:momentId/short', async (c) => c.json(await shortFromMoment(c.req.param('id'), c.req.param('momentId'))));
 

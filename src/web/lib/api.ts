@@ -2,6 +2,7 @@ import type { Project, RenderRecord, Word } from '../../shared/schema';
 import type { EditOp } from '../../shared/ops';
 import type { AnswerItem, ChatSnapshot } from '../../shared/agent-types';
 import type { MomentsState } from '../../shared/moments';
+import type { AutopilotState } from '../../shared/autopilot';
 import type { TranslationsState } from '../../shared/subtitles';
 
 export interface ProjectSummary {
@@ -203,6 +204,9 @@ export const api = {
   createShort: (id: string, ranges: [number, number][], title?: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/shorts`, { ranges, title }),
   moments: (id: string) => get<{ state: MomentsState | null; current: boolean }>(`/api/projects/${id}/moments`),
   findMoments: (id: string, opts: { count?: number; minSec?: number; maxSec?: number; focus?: string }) => send<{ state: MomentsState; current: boolean }>('POST', `/api/projects/${id}/moments`, opts),
+  autopilot: (id: string) => get<{ state: AutopilotState | null }>(`/api/projects/${id}/autopilot`),
+  startAutopilot: (id: string, body: { momentIds?: string[]; upload?: boolean; firstAt?: string; everyHours?: number; retry?: boolean }) => send<{ state: AutopilotState }>('POST', `/api/projects/${id}/autopilot`, body),
+  stopAutopilot: (id: string) => send<{ stopping: boolean }>('POST', `/api/projects/${id}/autopilot/stop`),
   shortFromMoment: (id: string, momentId: string) => send<{ id: string; name: string; duration: number }>('POST', `/api/projects/${id}/moments/${momentId}/short`),
   translations: (id: string) => get<{ state: TranslationsState; missing: Record<string, number> }>(`/api/projects/${id}/translations`),
   translate: (id: string, languages: string[], metadata = true) =>
