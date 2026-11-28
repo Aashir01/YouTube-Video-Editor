@@ -305,7 +305,7 @@ export const CloudSection: React.FC<{ onChanged: () => void }> = ({ onChanged })
       {status?.signedIn && status.account?.referralCode && <Invite account={status.account} />}
       <details className="text-xs text-dim">
         <summary className="cursor-pointer select-none">Advanced</summary>
-        <Field className="mt-2" label="Cutroom Cloud server" hint="Only change this if you run your own Cutroom Cloud.">
+        <Field className="mt-2" label="Cutroom Cloud server" hint="Only change this if you run your own Cutroom Cloud. Clear it to go back to Cutroom's server.">
           <input className="field font-mono text-xs" aria-label="Cutroom Cloud server" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => void saveUrl()} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
         </Field>
       </details>

@@ -17,7 +17,7 @@ cp .env.cloud.example .env.cloud     # set OPENROUTER_API_KEY and ADMIN_TOKEN
 npm run cloud                        # http://localhost:8787
 ```
 
-The app looks for Cloud at `CUTROOM_CLOUD_URL`, or `http://localhost:8787` by default. A user can change it under **Settings → Cutroom AI → Advanced**. Once Cloud is deployed, set `DEFAULT_CLOUD_URL` in `src/server/config.ts` to its address so builds point there.
+The app uses Cutroom's own Cloud, `https://cloud.cutroom.aashirnoman.dev`, by default (`DEFAULT_CLOUD_URL` in `src/server/config.ts`). To use your own, set it under **Settings → Cutroom AI → Advanced** (clear the field to go back) or set `CUTROOM_CLOUD_URL`. To work on Cloud locally, run `CUTROOM_CLOUD_URL=http://localhost:8787 npm start`.
 
 ### Deploy
 

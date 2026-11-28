@@ -115,8 +115,11 @@ const YouTubeSettingsSchema = z.object({
   channelTitle: z.string().default(''),
 });
 
-/** Where Cutroom Cloud runs (accounts, credits and the AI gateway); CUTROOM_CLOUD_URL overrides it. */
-export const DEFAULT_CLOUD_URL = 'http://localhost:8787';
+/**
+ * Where Cutroom Cloud runs (accounts, credits and the AI gateway). Self-hosters point the app at
+ * their own with Settings → Cutroom AI → Advanced, or CUTROOM_CLOUD_URL.
+ */
+export const DEFAULT_CLOUD_URL = 'https://cloud.cutroom.aashirnoman.dev';
 export const CLOUD_PROVIDER_ID = 'cutroom';
 
 const CloudSettingsSchema = z.object({
