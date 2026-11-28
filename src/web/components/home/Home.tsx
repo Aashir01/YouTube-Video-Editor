@@ -34,6 +34,7 @@ import { useStudio } from '../../lib/store';
 import { navigate } from '../../lib/nav';
 import { cn, errorText, formatClock, timeAgo } from '../../lib/utils';
 import { Logo } from '../icons';
+import { CreditMeter } from '../CreditMeter';
 import { Empty, IconBtn, Menu, Segmented, SelectField, Spinner } from '../ui';
 import { prefs } from '../../lib/prefs';
 
@@ -144,9 +145,12 @@ export const Home: React.FC = () => {
           <span className="text-[17px] font-semibold tracking-[-0.02em]">Cutroom</span>
           <span className="ml-1 rounded-md border border-line-2 bg-panel-2/80 px-1.5 py-px font-mono text-[10px] font-medium uppercase tracking-wider text-muted">Studio</span>
         </div>
-        <IconBtn label="Settings" onClick={() => openSettings()}>
-          <Settings className="size-4.5" />
-        </IconBtn>
+        <div className="flex items-center gap-1">
+          <CreditMeter />
+          <IconBtn label="Settings" onClick={() => openSettings()}>
+            <Settings className="size-4.5" />
+          </IconBtn>
+        </div>
       </header>
 
       <main className="relative mx-auto w-full max-w-6xl flex-1 px-6 pb-16">
@@ -156,11 +160,14 @@ export const Home: React.FC = () => {
               <KeyRound className="size-4.5" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">Connect an AI model to unlock the Director</div>
-              <div className="text-xs text-muted">Works with OpenAI, Google Gemini, Anthropic Claude, OpenRouter, Groq, DeepSeek, Ollama/LM Studio or any OpenAI-compatible API. You can still edit manually without one.</div>
+              <div className="font-semibold">Turn on the AI Director</div>
+              <div className="text-xs text-muted">Create a free Cutroom AI account for ready-to-use AI credits, or bring your own key (OpenAI, Gemini, Claude, OpenRouter, Groq, DeepSeek, Ollama/LM Studio or any OpenAI-compatible API). You can still edit by hand without one.</div>
             </div>
-            <button className="btn btn-primary" onClick={() => openSettings('models')}>
-              Add API key
+            <button className="btn" onClick={() => openSettings('models')}>
+              Use my own key
+            </button>
+            <button className="btn btn-primary" onClick={() => openSettings('cloud')}>
+              Get free AI credits
             </button>
           </div>
         )}

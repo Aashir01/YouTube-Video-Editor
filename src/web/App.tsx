@@ -13,10 +13,15 @@ import { currentProjectId, subscribeNav } from './lib/nav';
 export const App: React.FC = () => {
   const projectId = useSyncExternalStore(subscribeNav, currentProjectId);
   const refreshSystem = useStudio((s) => s.refreshSystem);
+  const refreshCloud = useStudio((s) => s.refreshCloud);
 
   useEffect(() => {
     void refreshSystem();
-  }, [refreshSystem]);
+    void refreshCloud();
+    // credits also change from other devices and background jobs
+    const t = setInterval(() => void refreshCloud(), 120_000);
+    return () => clearInterval(t);
+  }, [refreshSystem, refreshCloud]);
 
   return (
     <Tooltip.Provider>

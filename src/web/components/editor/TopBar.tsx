@@ -6,6 +6,7 @@ import { useStudio } from '../../lib/store';
 import { navigate } from '../../lib/nav';
 import { cn, modKey } from '../../lib/utils';
 import { Logo } from '../icons';
+import { CreditMeter } from '../CreditMeter';
 import { IconBtn, Menu, ProgressBar, Spinner, Tip } from '../ui';
 
 const ProjectName: React.FC = () => {
@@ -226,6 +227,7 @@ export const TopBar: React.FC = () => {
         <kbd className="rounded border border-line-2 px-1 font-mono text-[10px]">{modKey}K</kbd>
       </button>
       <Activity />
+      <CreditMeter />
       <IconBtn label="Settings" onClick={() => openSettings()}>
         <Settings className="size-4" />
       </IconBtn>

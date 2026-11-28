@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { toast } from 'sonner';
-import { Bot, Brain, Check, CircleCheck, CircleX, Clapperboard, Copy, ExternalLink, KeyRound, Mic, Plug, Plus, RefreshCw, Settings2, Trash2, X, Zap } from 'lucide-react';
+import { Bot, Brain, Check, Sparkles, CircleCheck, CircleX, Clapperboard, Copy, ExternalLink, KeyRound, Mic, Plug, Plus, RefreshCw, Settings2, Trash2, X, Zap } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStudio, type SettingsSection } from '../../lib/store';
 import { cn, copyText, errorText } from '../../lib/utils';
 import { YouTubeIcon } from '../icons';
 import { Badge, Field, NumberField, SelectField, Spinner, Switch } from '../ui';
+import { CloudSection } from './CloudSection';
 
 // The settings document as the server returns it (keys masked as "••••abcd").
 type Provider = { id: string; type: 'openai-compatible' | 'gemini' | 'anthropic'; name: string; baseUrl?: string; apiKey: string; models: string[] };
@@ -20,6 +21,7 @@ interface Settings {
   agent: { autonomy: string; maxSteps: number; visualQa: boolean };
   mcpServers: Record<string, unknown>;
   youtube: { clientId: string; clientSecret: string; refreshToken: string; channelTitle: string };
+  cloud: { url: string; token: string; email: string; models: unknown[] };
 }
 
 const PRESETS: { key: string; label: string; hint: string; provider: Omit<Provider, 'id' | 'apiKey'>; keyUrl?: string; noKey?: boolean }[] = [
@@ -38,6 +40,7 @@ const PRESETS: { key: string; label: string; hint: string; provider: Omit<Provid
 ];
 
 const NAV: { id: SettingsSection; label: string; icon: React.ElementType; hue: string }[] = [
+  { id: 'cloud', label: 'Cutroom AI', icon: Sparkles, hue: 'text-hue-ember' },
   { id: 'models', label: 'AI models', icon: Brain, hue: 'text-hue-violet' },
   { id: 'speech', label: 'Voice & speech', icon: Mic, hue: 'text-hue-green' },
   { id: 'media', label: 'Media & search keys', icon: KeyRound, hue: 'text-hue-amber' },
@@ -121,7 +124,7 @@ const ProviderCard: React.FC<{ p: Provider; readOnly?: boolean; onChange: (p: Pr
       <div className="mb-3 flex items-center gap-2">
         <span className="font-semibold">{p.name}</span>
         <Badge>{p.type}</Badge>
-        {readOnly && <Badge tone="accent">from environment</Badge>}
+        {readOnly && <Badge tone="accent">{p.id === 'cutroom' ? 'your Cutroom AI account' : 'from environment'}</Badge>}
         <span className="flex-1" />
         {!readOnly && (
           <button className="btn btn-sm btn-ghost text-dim hover:text-danger" onClick={onRemove}>
@@ -214,7 +217,8 @@ const ModelPicker: React.FC<{ label: string; hint: string; value: ModelRef | und
 };
 
 const ModelsSection: React.FC<{ s: Settings; eff: Settings; set: (s: Settings) => void }> = ({ s, eff, set }) => {
-  const envProviders = eff.llm.providers.filter((p) => p.id.startsWith('env-') && !s.llm.providers.some((x) => x.id === p.id));
+  // read-only: keys from the environment, and the Cutroom AI account (Settings → Cutroom AI)
+  const envProviders = eff.llm.providers.filter((p) => (p.id.startsWith('env-') || p.id === 'cutroom') && !s.llm.providers.some((x) => x.id === p.id));
   const all = [...s.llm.providers, ...envProviders];
   const setLlm = (patch: Partial<Settings['llm']>) => set({ ...s, llm: { ...s.llm, ...patch } });
   const add = (key: string) => {
@@ -233,6 +237,17 @@ const ModelsSection: React.FC<{ s: Settings; eff: Settings; set: (s: Settings) =
       <H title="AI models">
         The Director works with any modern LLM that supports tool calling. Bring your own key — it stays on this computer (data/settings.json). Vision-capable models (GPT‑5, Gemini 2.5, Claude) can also look at your footage and preview frames.
       </H>
+      {!eff.llm.providers.some((p) => p.id === 'cutroom') && (
+        <button onClick={() => useStudio.setState({ settingsSection: 'cloud' })} className="flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-left transition-colors hover:border-accent/70">
+          <span className="tile size-9 text-hue-ember">
+            <Sparkles className="size-4.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">No API key? Use Cutroom AI</span>
+            <span className="block text-xs text-muted">Free credits to start, then $3 a month or pay as you go. Nothing to set up.</span>
+          </span>
+        </button>
+      )}
       <Card className="grid gap-4">
         <ModelPicker label="Main model" hint="Runs the Director: planning, editing, writing. Use the strongest model you have." value={s.llm.main ?? eff.llm.main} providers={all} onChange={(v) => setLlm({ main: v })} />
         <ModelPicker label="Fast model" hint="Cheap, quick helper for summaries and small tasks." value={s.llm.fast ?? eff.llm.fast} providers={all} onChange={(v) => setLlm({ fast: v })} />
@@ -665,6 +680,17 @@ export const SettingsDialog: React.FC = () => {
       .catch((err) => toast.error(errorText(err)));
   }, [open]);
 
+  /** Cutroom AI changed the models on the server: take them over without losing other unsaved edits. */
+  const reloadModels = () =>
+    api
+      .settings()
+      .then((r) => {
+        setSaved(r.saved);
+        setEffective(r.effective);
+        setDraft((d) => (d ? { ...d, llm: { ...d.llm, main: r.saved.llm.main, fast: r.saved.llm.fast }, cloud: r.saved.cloud } : structuredClone(r.saved)));
+      })
+      .catch(() => undefined);
+
   const dirty = useMemo(() => Boolean(draft && saved && JSON.stringify(draft) !== JSON.stringify(saved)), [draft, saved]);
 
   const save = async () => {
@@ -719,6 +745,8 @@ export const SettingsDialog: React.FC = () => {
             <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
               {!draft || !effective ? (
                 <Spinner className="text-dim" />
+              ) : section === 'cloud' ? (
+                <CloudSection onChanged={() => void reloadModels()} />
               ) : section === 'models' ? (
                 <ModelsSection s={draft} eff={effective} set={setDraft} />
               ) : section === 'speech' ? (

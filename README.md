@@ -94,6 +94,7 @@ It runs locally as a web app (browser UI + Node server), works with **any LLM** 
 | LLM adapters | Native Anthropic, OpenAI-compatible and Gemini adapters (streaming, tool calls, vision) |
 | UI | React 19, Vite, Tailwind CSS 4, Zustand, Radix |
 | Integrations | MCP server (Streamable HTTP + stdio), MCP client, YouTube Data API |
+| Cutroom Cloud | Accounts, credit ledger and an OpenAI-compatible gateway to OpenRouter (Hono, built-in SQLite), billed by each request's real cost |
 
 The editor UI, the AI agent and MCP clients all edit the **same project document** with the **same operations**, so manual and AI edits behave identically and share one undo history. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -143,7 +144,9 @@ npm start          # builds the UI on first run, then opens http://localhost:333
 
 ### 3. Connect an AI model
 
-Open **Settings → AI models**, click a provider, paste a key, press **Fetch** to list its models, then **Test** and **Save**. Pick a strong **main model** (it runs the Director) and a cheap **fast model** (summaries and small tasks).
+**No API key?** Open **Settings → Cutroom AI** and create an account. You get free credits (300 to start and 50 more each month), and the Director works right away on low-cost models: DeepSeek and Qwen for text, Gemini Flash when it looks at your footage. When those run out, the **Creator** plan is $3 a month for 2,000 credits a month, or you can buy credit packs that never expire. Credits are charged by what each AI request really costs, and the top bar shows how many are left. Editing, rendering and local voices never cost credits. Cutroom AI is served by [Cutroom Cloud](docs/CLOUD.md), a small server in this repository that you can run yourself.
+
+To use your own key instead, open **Settings → AI models**, click a provider, paste a key, press **Fetch** to list its models, then **Test** and **Save**. Pick a strong **main model** (it runs the Director) and a cheap **fast model** (summaries and small tasks).
 
 Or put keys in a `.env` file (copy [.env.example](.env.example)); they're picked up automatically:
 
@@ -330,6 +333,7 @@ npm run dev         # server + Vite with hot reload on http://localhost:3333
 npm test            # unit + integration tests (timeline, ops, keyframes, reframe, agent loop, LLM adapters, MCP, services)
 npm run test:e2e    # browser tests of the whole app (needs FFmpeg + `npx playwright install chromium`; see tests/e2e)
 npm run typecheck
+npm run cloud       # Cutroom Cloud (accounts, credits, AI gateway) on http://localhost:8787; see docs/CLOUD.md
 npx tsx scripts/template-gallery.ts   # renders every template as stills into dist/gallery
 ```
 
@@ -340,10 +344,12 @@ src/remotion/           the video composition: clips, effects, 28 templates, cap
 src/server/             HTTP API, storage, media pipeline, rendering, services, agent, MCP
 src/server/agent/       Director loop, prompts, skills (Markdown), 53 tools
 src/web/                the editor UI
+src/cloud/              Cutroom Cloud: accounts, credit ledger, model catalog, the AI gateway
 assets/models/          bundled ONNX models (face detection; person segmentation for background removal)
 tests/e2e/              browser test suites, fixtures and runner
 scripts/                one-off tools (converting the segmentation model to ONNX)
 docs/ARCHITECTURE.md    how it all fits together
+docs/CLOUD.md           running Cutroom Cloud: plans, pricing, models, admin, payments
 ```
 
 ## Licensing notes

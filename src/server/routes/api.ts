@@ -31,8 +31,11 @@ import { beatsFor } from '../footage';
 import { missingCounts } from '../../shared/subtitles';
 import { analysisQueue } from '../jobs';
 import { importOptional } from '../optional';
+import { cloud } from './cloud';
 
 export const api = new Hono();
+
+api.route('/cloud', cloud);
 
 const errorMessage = (err: unknown) => (err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') : err instanceof Error ? err.message : String(err));
 
